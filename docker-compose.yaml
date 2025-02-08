@@ -1,0 +1,13 @@
+services:
+  app:
+    container_name: ${PROJECT_NAME}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - /home/insystem-api/files/${PROJECT_NAME}/uploads:/usr/src/app/uploads
+      - /home/insystem-api/files/${PROJECT_NAME}/files:/usr/src/app/files
+    ports:
+      - ${PORT}:${PORT}
+    environment:
+      - NODE_ENV=${NODE_ENV}
