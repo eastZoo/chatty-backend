@@ -31,7 +31,6 @@ constructor(
   async userSiginIn(username: string, password: string, res: Response) {
     const user = await this.validateAdminUser({ username, password });
 
-    console.log('user : ', user);
     if (!user) {
       return res.send({
         success: false,
@@ -68,7 +67,7 @@ constructor(
    * @returns {{ success:boolean; accessToken: string; refreshToken: string }} 유저정보
    */
   async userRegister(siginUpDto: RegisterDto) {
-    console.log('siginUpDto : ', siginUpDto);
+
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();

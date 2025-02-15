@@ -96,9 +96,6 @@ export class ChatsService {
       throw new BadRequestException('FriendId is required for private chat');
     }
 
-    console.log('user', user);
-    console.log('createChatDto', createChatDto);
-
     // Fetch the existing chat if any
     const existingChat = await this.privateChatRepository
       .createQueryBuilder('privateChat')
@@ -108,23 +105,19 @@ export class ChatsService {
       )
       .getOne();
 
-    console.log('existingChat', existingChat);
-
     if (existingChat) {
       return { ...existingChat, type: 'private' } as PrivateChat;
     } else {
-      console.log('no existingChat');
       // If no existing chat, create a new one
       newChat = this.privateChatRepository.create({
         userA: user,
         userB: { id: createChatDto.friendId } as Users,
       });
-      console.log('newChat', newChat);
     }
 
     try {
       const savedChat = await this.privateChatRepository.save(newChat);
-      console.log('savedChat', savedChat);
+
       return { ...savedChat, type: 'private' } as PrivateChat;
     } catch (error) {
       throw new InternalServerErrorException('Error creating private chat');
