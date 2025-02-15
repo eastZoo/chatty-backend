@@ -8,9 +8,18 @@ import { ChatsService } from '../chats/chats.service';
 import { ChatGateway } from 'src/chat.gateway';
 import { PrivateChat } from 'src/entities/private-chat.entity';
 import { Users } from 'src/entities/users.entity';
+import { ChatReadStatus } from 'src/entities/chat-read-status.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Message, Chat, PrivateChat, Users])],
+  imports: [
+    TypeOrmModule.forFeature([
+      Message,
+      Chat,
+      PrivateChat,
+      Users,
+      ChatReadStatus,
+    ]),
+  ],
   controllers: [MessagesController],
   providers: [MessagesService, ChatsService, ChatGateway],
 })

@@ -83,6 +83,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const { roomId, chatType } = data;
 
+    console.log('roomId', roomId);
+    console.log('chatType', chatType);
     try {
       if (!roomId || !chatType) {
         throw new Error('roomId and chatType are required');
@@ -92,7 +94,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         roomId,
         chatType,
       );
-      console.log('messages', messages);
+
       client.emit('previousMessages', messages);
       console.log(
         `Sent previous messages for ${chatType} chat ${roomId} to socket ${client.id}`,
@@ -115,7 +117,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     },
     @ConnectedSocket() client: Socket,
   ) {
-    console.log('sendMessage', data);
     try {
       if (!data.chatId || !data.content || !data.userId) {
         throw new Error('Missing required fields');
@@ -135,8 +136,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           { id: data.userId, username: data.username } as any,
         );
       }
-
-      console.log('newMessage', data.chatId);
       this.server.to(data.chatId).emit('newMessage', savedMessage);
       console.log(`Broadcasted saved message to room ${data.chatId}`);
     } catch (error) {
@@ -146,7 +145,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   broadcastMessage(message: any) {
-    console.log('message', message);
     if (message.chat && message.chat.id) {
       this.server.to(message.chat.id).emit('newMessage', message);
       console.log(`Broadcasted newMessage to room ${message.chat.id}`);

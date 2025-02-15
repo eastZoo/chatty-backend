@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -15,6 +16,7 @@ import { TokenUserInfo } from 'src/types/requestWithUser.types';
 import { Message } from 'src/entities/message.entity';
 import { PrivateChat } from 'src/entities/private-chat.entity';
 import { ChatReadStatus } from 'src/entities/chat-read-status.entity';
+import { ChatReadDto } from './dto/chat-read.dto';
 
 @Injectable()
 export class ChatsService {
@@ -27,6 +29,8 @@ export class ChatsService {
     private privateChatRepository: Repository<PrivateChat>,
     @InjectRepository(Users)
     private usersRepository: Repository<Users>,
+    @InjectRepository(ChatReadStatus)
+    private chatReadStatusRepository: Repository<ChatReadStatus>,
   ) {}
 
   /**
@@ -128,6 +132,7 @@ export class ChatsService {
    * 1:1 채팅방 목록 조회
    *  */
   async getPrivateChats(user: TokenUserInfo): Promise<any[]> {
+    console.log('user.id', user.id);
     const chats = await this.privateChatRepository
       .createQueryBuilder('privateChat')
       .leftJoinAndSelect('privateChat.userA', 'userA')
@@ -139,23 +144,47 @@ export class ChatsService {
       .orderBy('privateChat.updatedAt', 'DESC')
       .getMany();
 
-    return chats.map((chat) => {
-      const otherUser = chat.userA.id === user.id ? chat.userB : chat.userA;
-      let lastMessage = '';
-      if (chat.messages && chat.messages.length > 0) {
-        chat.messages.sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        );
-        lastMessage = chat.messages[chat.messages.length - 1].content;
-      }
-      return {
-        id: chat.id,
-        otherUser,
-        lastMessage,
-        updatedAt: chat.updatedAt,
-      };
-    });
+    const chatsWithUnread = await Promise.all(
+      chats.map(async (chat) => {
+        // 상대방 정보 추출
+        const otherUser = chat.userA.id === user.id ? chat.userB : chat.userA;
+        // 마지막 메시지 추출 (없으면 빈 문자열)
+        let lastMessage = '';
+        if (chat.messages && chat.messages.length > 0) {
+          chat.messages.sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          );
+          lastMessage = chat.messages[chat.messages.length - 1].content;
+        }
+        // 읽지 않은 메시지 개수 계산:
+        // ChatReadStatus에서 현재 사용자의 마지막 읽은 시각을 가져옵니다.
+        const chatType: 'group' | 'private' = (chat as any).type || 'private';
+        const readStatus = await this.chatReadStatusRepository.findOne({
+          where: { chatId: chat.id, chatType: chatType, user: { id: user.id } },
+        });
+        console.log('readStatus', readStatus);
+        const lastReadAt = readStatus ? readStatus.lastReadAt : new Date(0);
+        // 해당 채팅방(privateChat)에 대해, 현재 사용자가 보낸 메시지가 아닌, lastReadAt 이후의 메시지 수를 구합니다.
+
+        const unreadCount = await this.messageRepository
+          .createQueryBuilder('message')
+          .where('message.private_chat_id = :chatId', { chatId: chat.id })
+          .andWhere('message.sender_id != :userId', { userId: user.id })
+          .andWhere('message.created_at > :lastReadAt', { lastReadAt })
+          .getCount();
+
+        console.log('unreadCount', unreadCount);
+        return {
+          id: chat.id,
+          otherUser,
+          lastMessage,
+          unreadCount,
+          updatedAt: chat.updatedAt,
+        };
+      }),
+    );
+    return chatsWithUnread;
   }
 
   /**
@@ -187,5 +216,43 @@ export class ChatsService {
       privateChat,
     });
     return this.messageRepository.save(message);
+  }
+
+  /** 주어진 채팅방에 대해 사용자의 마지막 읽은 시각을 업데이트합니다. */
+  async markChatAsRead(user: TokenUserInfo, chat: ChatReadDto): Promise<void> {
+    // 그룹 채팅은 Chat 엔티티, 1:1 채팅은 PrivateChat 엔티티
+    // PrivateChat 엔티티에서는 getOrCreatePrivateChat 메서드에서 type을 'private'으로 추가했다고 가정합니다.
+    console.log('chat', chat);
+
+    const chatType: 'group' | 'private' = chat.chatType || 'group';
+    const chatId = chat.id;
+
+    console.log('chatType', chatType);
+    console.log('chatId', chatId);
+
+    // 채팅 읽음 상태 업데이트 ( chat과 chatType을 통해 채팅 읽음 상태 업데이트)
+    let readStatus = await this.chatReadStatusRepository.findOne({
+      where: { chatId: chatId, chatType: chatType, user: { id: user.id } },
+    });
+
+    Logger.log('readStatus', readStatus);
+    if (readStatus) {
+      Logger.log('readStatus 존재');
+      console.log('readStatus', readStatus);
+      // readStatus.lastReadAt = new Date();
+      // new Date()로 업데이트하면 디비 시간과 클라이언트 시간이 다르므로, 삭제합니다.
+      delete readStatus.lastReadAt;
+
+      // 이미 해당 채팅방에 대한 읽음 상태가 있으면, 그상태의 시간만 업데이트합니다.
+      await this.chatReadStatusRepository.update(readStatus.id, readStatus);
+    } else {
+      readStatus = this.chatReadStatusRepository.create({
+        chatId: chatId,
+        chatType: chatType,
+        user: user,
+        // lastReadAt: new Date(),
+      });
+      await this.chatReadStatusRepository.save(readStatus);
+    }
   }
 }

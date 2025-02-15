@@ -14,6 +14,7 @@ import { CreateChatDto } from './dto/create-chat.dto';
 import { UpdateChatDto } from './dto/update-chat.dto';
 import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
 import { RequestWithUser } from 'src/types/requestWithUser.types';
+import { ChatReadDto } from './dto/chat-read.dto';
 
 @Controller('chats')
 export class ChatsController {
@@ -40,12 +41,13 @@ export class ChatsController {
   async getPrivateChats(@Req() req: RequestWithUser) {
     const user = req.user;
     const chats = await this.chatsService.getPrivateChats(user);
-    // 이미 ChatsService에서 otherUser와 lastMessage를 포함해서 반환하도록 수정했다고 가정
+    // 각 채팅방 객체에는 이미 otherUser, lastMessage, unreadCount가 포함되어 있습니다.
     return chats.map((chat) => ({
       id: chat.id,
       chatName: chat.otherUser ? chat.otherUser.username : '',
       otherUser: chat.otherUser,
       lastMessage: chat.lastMessage,
+      unreadCount: chat.unreadCount,
       updatedAt: chat.updatedAt,
     }));
   }
@@ -70,5 +72,18 @@ export class ChatsController {
     @Req() req,
   ) {
     return this.chatsService.update(id, updateChatDto, req.user);
+  }
+
+  // 채팅방 읽음 상태 업데이트 엔드포인트
+  @Post('private/read')
+  @UseGuards(AccessTokenGuard)
+  async markChatAsRead(
+    @Req() req: RequestWithUser,
+    @Body()
+    chat: ChatReadDto,
+  ) {
+    const user = req.user;
+    await this.chatsService.markChatAsRead(user, chat);
+    return { success: true };
   }
 }

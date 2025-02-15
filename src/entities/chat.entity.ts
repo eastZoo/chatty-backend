@@ -40,9 +40,6 @@ export class Chat {
   @OneToMany(() => Message, (message) => message.chat, { cascade: true })
   messages: Message[];
 
-  @OneToMany(() => ChatReadStatus, (readStatus) => readStatus.chat)
-  readStatuses: ChatReadStatus[];
-
   @CreateDateColumn()
   createdAt: Date;
 

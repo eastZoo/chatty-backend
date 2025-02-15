@@ -1,5 +1,5 @@
 // src/chats/dto/create-chat.dto.ts
-export class CreateChatDto {
+export interface CreateChatDto {
   title?: string;
   friendId?: string;
 }

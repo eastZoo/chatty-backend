@@ -32,6 +32,6 @@ export class Message {
   @ManyToOne(() => Users, (user) => user.messages, { eager: true })
   sender: Users;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 }

@@ -33,7 +33,7 @@ import { FriendsModule } from './app/friends/friends.module';
       entities: [__dirname + '/entities/*.entity{.ts,.js}'],
       synchronize: true,
       namingStrategy: new SnakeNamingStrategy(),
-      logging: false,
+      logging: true,
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'uploads'),
