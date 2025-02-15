@@ -14,6 +14,7 @@ import { MulterModule } from '@nestjs/platform-express';
 import { validate } from './util/env.validation';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { LoggerMiddleware } from './middleware/logger.middleware';
+import { FriendsModule } from './app/friends/friends.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { LoggerMiddleware } from './middleware/logger.middleware';
     UsersModule,
     ChatsModule,
     MessagesModule,
+    FriendsModule,
   ],
   controllers: [AppController],
   providers: [

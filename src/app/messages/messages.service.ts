@@ -17,36 +17,57 @@ export class MessagesService {
     private chatGateway: ChatGateway, // 주입
   ) {}
 
-  async findAllByChat(chatId: string): Promise<Message[]> {
-    await this.chatsService.findById(chatId);
+  async findAllByChat(
+    chatId: string,
+    chatType: 'group' | 'private',
+  ): Promise<Message[]> {
+    let chat;
+
+    if (chatType === 'group') {
+      chat = await this.chatsService.findById(chatId);
+    } else if (chatType === 'private') {
+      chat = await this.chatsService.findPrivateChatById(chatId);
+    }
+
+    if (!chat) {
+      throw new NotFoundException(`${chatType} Chat not found`);
+    }
+
+    // Retrieve messages for the chat (group or private)
     return this.messagesRepository.find({
-      where: { chat: { id: chatId } },
+      where: chatType === 'group' 
+        ? { chat: { id: chat.id } }
+        : { privateChat: { id: chat.id } },
       order: { createdAt: 'ASC' },
     });
   }
 
-  async create(chatId: string, createMessageDto: CreateMessageDto, user: Users): Promise<Message> {
-  const chat = await this.chatsService.findById(chatId);
-  if (!chat) {
-    throw new NotFoundException('Chat not found');
+  async create(
+    chatId: string,
+    createMessageDto: CreateMessageDto,
+    user: Users,
+  ): Promise<Message> {
+    const chat = await this.chatsService.findById(chatId);
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
+
+    const message = this.messagesRepository.create({
+      content: createMessageDto.content,
+      chat: chat,
+      sender: user,
+    });
+
+    // 메시지를 저장합니다.
+    const savedMessage = await this.messagesRepository.save(message);
+
+    // 저장된 메시지를 다시 조회해 sender 정보까지 포함한 완전한 메시지를 반환합니다.
+    const fullMessage = await this.messagesRepository.findOne({
+      where: { id: savedMessage.id },
+      relations: ['sender', 'chat'], // sender의 전체 정보와 chat 관계를 가져옵니다.
+    });
+
+    // 여기서는 브로드캐스트를 하지 않고, chat.gateway.ts.의  handleSendMessage에서만 브로드캐스트하도록 합니다.
+    return fullMessage;
   }
-
-  const message = this.messagesRepository.create({
-    content: createMessageDto.content,
-    chat: chat,
-    sender: user,
-  });
-
-  // 메시지를 저장합니다.
-  const savedMessage = await this.messagesRepository.save(message);
-
-  // 저장된 메시지를 다시 조회해 sender 정보까지 포함한 완전한 메시지를 반환합니다.
-  const fullMessage = await this.messagesRepository.findOne({
-    where: { id: savedMessage.id },
-    relations: ['sender', 'chat'],  // sender의 전체 정보와 chat 관계를 가져옵니다.
-  });
-
-// 여기서는 브로드캐스트를 하지 않고, chat.gateway.ts.의  handleSendMessage에서만 브로드캐스트하도록 합니다.
-  return fullMessage;
-}
 }

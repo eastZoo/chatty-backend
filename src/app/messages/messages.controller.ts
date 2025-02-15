@@ -1,5 +1,13 @@
 // src/messages/messages.controller.ts
-import { Controller, Get, Post, Param, Body, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
@@ -11,12 +19,16 @@ export class MessagesController {
   @UseGuards(AccessTokenGuard)
   @Get()
   async findAll(@Param('chatId') chatId: string) {
-    return this.messagesService.findAllByChat(chatId);
+    return this.messagesService.findAllByChat(chatId, 'private');
   }
 
   @UseGuards(AccessTokenGuard)
   @Post()
-  async create(@Param('chatId') chatId: string, @Body() createMessageDto: CreateMessageDto, @Req() req) {
+  async create(
+    @Param('chatId') chatId: string,
+    @Body() createMessageDto: CreateMessageDto,
+    @Req() req,
+  ) {
     return this.messagesService.create(chatId, createMessageDto, req.user);
   }
 }
