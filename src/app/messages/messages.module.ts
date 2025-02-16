@@ -9,7 +9,8 @@ import { ChatGateway } from 'src/chat.gateway';
 import { PrivateChat } from 'src/entities/private-chat.entity';
 import { Users } from 'src/entities/users.entity';
 import { ChatReadStatus } from 'src/entities/chat-read-status.entity';
-
+import { PushNotificationService } from '../push-notification/push-notification.service';
+import { HttpModule } from '@nestjs/axios';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -19,8 +20,14 @@ import { ChatReadStatus } from 'src/entities/chat-read-status.entity';
       Users,
       ChatReadStatus,
     ]),
+    HttpModule,
   ],
   controllers: [MessagesController],
-  providers: [MessagesService, ChatsService, ChatGateway],
+  providers: [
+    MessagesService,
+    ChatsService,
+    ChatGateway,
+    PushNotificationService,
+  ],
 })
 export class MessagesModule {}

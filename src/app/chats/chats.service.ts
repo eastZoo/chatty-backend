@@ -17,7 +17,8 @@ import { Message } from 'src/entities/message.entity';
 import { PrivateChat } from 'src/entities/private-chat.entity';
 import { ChatReadStatus } from 'src/entities/chat-read-status.entity';
 import { ChatReadDto } from './dto/chat-read.dto';
-
+import { HttpService } from '@nestjs/axios';
+import { PushNotificationService } from '../push-notification/push-notification.service';
 @Injectable()
 export class ChatsService {
   constructor(
@@ -31,6 +32,8 @@ export class ChatsService {
     private usersRepository: Repository<Users>,
     @InjectRepository(ChatReadStatus)
     private chatReadStatusRepository: Repository<ChatReadStatus>,
+    private readonly httpService: HttpService,
+    private readonly pushNotificationService: PushNotificationService,
   ) {}
 
   /**
@@ -198,12 +201,12 @@ export class ChatsService {
     // PrivateChat 객체 조회
     const privateChat = await this.privateChatRepository.findOne({
       where: { id: roomId },
-      relations: ['messages'],
+      relations: ['messages', 'userA', 'userB'],
     });
     if (!privateChat) {
       throw new BadRequestException('Private chat not found');
     }
-    // sender 정보 조회 (생략 가능: 클라이언트에서 sender 정보를 같이 보낼 수도 있음)
+    // sender 정보 조회
     const sender = await this.usersRepository.findOne({
       where: { id: senderId },
     });
@@ -215,7 +218,22 @@ export class ChatsService {
       sender,
       privateChat,
     });
-    return this.messageRepository.save(message);
+    const savedMessage = await this.messageRepository.save(message);
+
+    // 수신자(B) 결정: sender가 A이면, recipient는 B, 반대인 경우도 마찬가지
+    const recipient =
+      privateChat.userA.id === senderId ? privateChat.userB : privateChat.userA;
+
+    // 푸시 알림 전송: await하지 않고 비동기로 실행합니다.
+    if (recipient && recipient.fcmToken) {
+      this.pushNotificationService
+        .sendPushNotification(recipient.fcmToken, sender.username, content)
+        .catch((error) => {
+          Logger.error('Error sending push notification:', error);
+        });
+    }
+
+    return savedMessage;
   }
 
   /** 주어진 채팅방에 대해 사용자의 마지막 읽은 시각을 업데이트합니다. */
@@ -254,5 +272,29 @@ export class ChatsService {
       });
       await this.chatReadStatusRepository.save(readStatus);
     }
+  }
+
+  async sendPushNotification(token: string, title: string, body: string) {
+    const message = {
+      message: {
+        token,
+        notification: { title, body },
+      },
+    };
+
+    // FCM HTTP v1 API URL: Firebase 콘솔에서 프로젝트 설정에 따라 확인합니다.
+    const url = `https://fcm.googleapis.com/v1/projects/${process.env.FCM_PROJECT_ID}/messages:send`;
+
+    // 서버 인증: OAuth 2.0 토큰 또는 서비스 계정 키를 사용합니다.
+    const serverToken = `${process.env.FCM_SERVER_TOKEN}`;
+
+    await this.httpService
+      .post(url, message, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serverToken}`,
+        },
+      })
+      .toPromise();
   }
 }

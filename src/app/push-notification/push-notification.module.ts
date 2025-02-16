@@ -10,6 +10,9 @@ import { HttpModule } from '@nestjs/axios';
 @Module({
   controllers: [PushNotificationController],
   providers: [PushNotificationService],
-  imports: [TypeOrmModule.forFeature([PrivateChat, Users, Message]), HttpModule],
+  imports: [
+    TypeOrmModule.forFeature([PrivateChat, Users, Message]),
+    HttpModule,
+  ],
 })
 export class PushNotificationModule {}

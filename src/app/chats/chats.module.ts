@@ -9,7 +9,8 @@ import { UsersModule } from '../users/users.module';
 import { Message } from '../../entities/message.entity';
 import { ChatReadStatus } from '../../entities/chat-read-status.entity';
 import { Users } from 'src/entities/users.entity';
-
+import { HttpModule } from '@nestjs/axios';
+import { PushNotificationService } from '../push-notification/push-notification.service';
 // src/chats/chats.module.ts
 @Module({
   imports: [
@@ -21,8 +22,9 @@ import { Users } from 'src/entities/users.entity';
       Users,
     ]),
     forwardRef(() => UsersModule),
+    HttpModule,
   ],
-  providers: [ChatsService],
+  providers: [ChatsService, PushNotificationService],
   controllers: [ChatsController],
   exports: [ChatsService],
 })

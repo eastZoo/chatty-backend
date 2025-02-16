@@ -1,87 +1,70 @@
-// src/push-notification/push-notification.service.ts
+import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { PrivateChat } from 'src/entities/private-chat.entity';
-import { Users } from 'src/entities/users.entity';
-import { Message } from 'src/entities/message.entity';
-import { Repository } from 'typeorm';
+import { GoogleAuth } from 'google-auth-library';
+import { lastValueFrom } from 'rxjs';
 
 @Injectable()
 export class PushNotificationService {
-  constructor(
-    private readonly httpService: HttpService,
-    @InjectRepository(PrivateChat)
-    private readonly privateChatRepository: Repository<PrivateChat>,
-    @InjectRepository(Users)
-    private readonly usersRepository: Repository<Users>,
-    @InjectRepository(Message)
-    private readonly messageRepository: Repository<Message>,
-  ) {}
+  private accessToken: string | null = null;
+  private tokenExpiry: number = 0; // Unix timestamp in ms
 
-  // 메시지 생성시 푸시 알림 전송
-  async createPrivateMessage(
-    roomId: string,
-    content: string,
-    senderId: string,
-  ): Promise<Message> {
-    const privateChat = await this.privateChatRepository.findOne({
-      where: { id: roomId },
-      relations: ['messages'],
-    });
-    if (!privateChat) {
-      throw new BadRequestException('Private chat not found');
-    }
-    const sender = await this.usersRepository.findOne({
-      where: { id: senderId },
-    });
-    if (!sender) {
-      throw new BadRequestException('Sender not found');
-    }
-    const message = this.messageRepository.create({
-      content,
-      sender,
-      privateChat,
-    });
-    const savedMessage = await this.messageRepository.save(message);
+  constructor(private readonly httpService: HttpService) {}
 
-    // 수신자(B) 결정: sender가 A이면, 수신자는 B
-    const recipient =
-      privateChat.userA.id === senderId ? privateChat.userB : privateChat.userA;
-
-    // recipient의 FCM 토큰 조회
-    if (recipient && recipient.fcmToken) {
-      // PushNotificationService 주입을 통해 알림 전송 (의존성 주입 설정 필요)
-      await this.sendPushNotification(
-        recipient.fcmToken,
-        sender.username, // A의 이름
-        content, // 전송한 메시지 내용
-      );
+  // 토큰이 없거나 만료되었으면 새 토큰을 요청하여 캐싱합니다.
+  async getAccessToken(): Promise<string> {
+    const now = Date.now();
+    if (this.accessToken && this.tokenExpiry - 60000 > now) {
+      return this.accessToken;
     }
-    return savedMessage;
+    // 서비스 계정 JSON 파일 경로와 스코프를 지정합니다.
+    const auth = new GoogleAuth({
+      keyFile: 'chatty-5ad6f-firebase-adminsdk-fbsvc-bb0d9043e8.json', // 서비스 계정 키 파일 경로를 지정하세요.
+      scopes: 'https://www.googleapis.com/auth/firebase.messaging',
+    });
+    const client = await auth.getClient();
+    const accessTokenResponse = await client.getAccessToken();
+    this.accessToken = accessTokenResponse.token!;
+    // 만약 만료 시간이 제공되지 않으면, 55분 후로 설정합니다.
+    if (client.credentials.expiry_date) {
+      this.tokenExpiry = client.credentials.expiry_date;
+    } else {
+      this.tokenExpiry = now + 55 * 60 * 1000;
+    }
+    Logger.log(`Obtained new access token, expires at ${this.tokenExpiry}`);
+    return this.accessToken;
   }
 
-  async sendPushNotification(token: string, title: string, body: string) {
+  // FCM HTTP v1 API를 이용해 푸시 알림 전송
+  async sendPushNotification(fcmToken: string, title: string, body: string) {
+    const accessToken = await this.getAccessToken();
+
     const message = {
       message: {
-        token,
+        token: fcmToken,
         notification: { title, body },
       },
     };
 
-    // FCM HTTP v1 API URL: Firebase 콘솔에서 프로젝트 설정에 따라 확인합니다.
-    const url = `https://fcm.googleapis.com/v1/projects/${process.env.FCM_PROJECT_ID}/messages:send`;
+    // 환경 변수 FCM_PROJECT_ID에 실제 프로젝트 ID를 입력하세요.
+    const projectId = process.env.FCM_PROJECT_ID;
+    if (!projectId) {
+      throw new Error('FCM_PROJECT_ID is not set in environment variables');
+    }
+    const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
 
-    // 서버 인증: OAuth 2.0 토큰 또는 서비스 계정 키를 사용합니다.
-    const serverToken = `${process.env.FCM_SERVER_TOKEN}`;
-
-    await this.httpService
-      .post(url, message, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${serverToken}`,
-        },
-      })
-      .toPromise();
+    try {
+      const response = await lastValueFrom(
+        this.httpService.post(url, message, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }),
+      );
+      Logger.log('Push notification sent successfully', response.data);
+    } catch (error) {
+      Logger.error('Failed to send push notification', error);
+      throw error;
+    }
   }
 }
