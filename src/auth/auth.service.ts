@@ -218,6 +218,8 @@ export class AuthService {
   /** FCM 토큰 업데이트 */
   async updsertFcmToken({ userId, token }: { userId: string; token: string }) {
     try {
+      console.log('userId : ', userId);
+      console.log('token : ', token);
       await this.dataSource
         .getRepository(Users)
         .upsert({ id: userId, fcmToken: token }, ['id']);

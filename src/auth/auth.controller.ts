@@ -7,6 +7,7 @@ import {
   Controller,
   UseGuards,
   Get,
+  Put,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -75,7 +76,7 @@ export class AuthController {
    * 유저 FCM 토큰 등록
    */
   @UseGuards(AccessTokenGuard)
-  @Post('/update-fcm-token')
+  @Put('/update-fcm-token')
   async updateFcmToken(
     @Req() req: any,
     @Body() updateFcmTokenDto: UpdateFcmTokenDto,

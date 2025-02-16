@@ -69,14 +69,11 @@ export class PushNotificationService {
       },
     };
 
-    // 프로젝트 아이디 : chatty-5ad6f
     // FCM HTTP v1 API URL: Firebase 콘솔에서 프로젝트 설정에 따라 확인합니다.
-    const url =
-      'https://fcm.googleapis.com/v1/projects/chatty-5ad6f/messages:send';
+    const url = `https://fcm.googleapis.com/v1/projects/${process.env.FCM_PROJECT_ID}/messages:send`;
 
     // 서버 인증: OAuth 2.0 토큰 또는 서비스 계정 키를 사용합니다.
-    const serverToken =
-      'ya29.a0AXeO80Qg_xWsLp6aLpS3UTZcL37UnWBYCwN55aK8fUZXFJ69dg_gaDEYnP8cuYfZkkBbQ2-nMvSJNV4K8uXPFunsLm10RB7wQRlY1xY7Ba_NGAJYH2Fva7UW-hIL5SkwgQOQa_8mvd9huenEhfIkentvm3h7NCS0l0AVju8faCgYKAU4SARISFQHGX2Mi1qoT71kQ0kpgUuFcR5Qq_w0175';
+    const serverToken = `${process.env.FCM_SERVER_TOKEN}`;
 
     await this.httpService
       .post(url, message, {
