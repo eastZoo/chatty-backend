@@ -6,16 +6,11 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 export class AccessTokenStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor() {
     super({
-      jwtFromRequest: (req) => {
-        if (req && req.cookies) {
-          return req.cookies['accessToken'];
-        }
-        return null;
-      },
-      secretOrKey: process.env.ADMIN_JWT_SECRET, // 실제 시크릿 키로 변경
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ignoreExpiration: false,
+      secretOrKey: process.env.ADMIN_JWT_SECRET,
     });
   }
-
   async validate(payload: any) {
     Logger.log('USER', payload.username);
     return {

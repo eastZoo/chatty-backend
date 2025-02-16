@@ -7,15 +7,11 @@ export class RefreshTokenStrategy extends PassportStrategy(
   Strategy,
   'jwt-refresh',
 ) {
-   constructor() {
+  constructor() {
     super({
-      jwtFromRequest: (req) => {
-        if (req && req.cookies) {
-          return req.cookies['refreshToken'];
-        }
-        return null;
-      },
-      secretOrKey: process.env.ADMIN_JWT_REFRESH_SECRET, // 실제 시크릿 키로 변경
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ignoreExpiration: false,
+      secretOrKey: process.env.ADMIN_JWT_REFRESH_SECRET,
     });
   }
 

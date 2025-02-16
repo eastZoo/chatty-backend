@@ -15,6 +15,7 @@ import { validate } from './util/env.validation';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { LoggerMiddleware } from './middleware/logger.middleware';
 import { FriendsModule } from './app/friends/friends.module';
+import { PushNotificationModule } from './app/push-notification/push-notification.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { FriendsModule } from './app/friends/friends.module';
     ChatsModule,
     MessagesModule,
     FriendsModule,
+    PushNotificationModule,
   ],
   controllers: [AppController],
   providers: [

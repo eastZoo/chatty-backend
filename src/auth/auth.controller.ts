@@ -1,4 +1,13 @@
-import { Body, Post, Req, Res, UnauthorizedException, Controller, UseGuards, Get } from '@nestjs/common';
+import {
+  Body,
+  Post,
+  Req,
+  Res,
+  UnauthorizedException,
+  Controller,
+  UseGuards,
+  Get,
+} from '@nestjs/common';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Request, Response } from 'express';
@@ -6,23 +15,24 @@ import { AdminAccessTokenMaxAge } from 'src/util/getTokenMaxAge';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { AccessTokenGuard } from './guards/access-token.guard';
+import { UpdateFcmTokenDto } from './dto/update-fcm-token.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-    @ApiOperation({ summary: '로그인' })
+  @ApiOperation({ summary: '로그인' })
   @ApiResponse({
     status: 200,
     type: Boolean,
   })
   @Post('/sign-in')
-  async userSiginIn(@Body() loginDto: LoginDto, @Res() res: Response) {
+  async userSiginIn(@Body() loginDto: LoginDto) {
     const { username, password } = loginDto;
-    return this.authService.userSiginIn(username, password, res);
+    return this.authService.userSiginIn(username, password);
   }
 
-    @ApiOperation({ summary: '회원가입' })
+  @ApiOperation({ summary: '회원가입' })
   @ApiResponse({
     status: 200,
     description: '회원가입',
@@ -59,5 +69,23 @@ export class AuthController {
         maxAge: AdminAccessTokenMaxAge, // 1분 (60초 * 1000밀리초)
       })
       .send({ success: true });
+  }
+
+  /**
+   * 유저 FCM 토큰 등록
+   */
+  @UseGuards(AccessTokenGuard)
+  @Post('/update-fcm-token')
+  async updateFcmToken(
+    @Req() req: any,
+    @Body() updateFcmTokenDto: UpdateFcmTokenDto,
+  ) {
+    const { id } = req.user;
+    const { token } = updateFcmTokenDto;
+
+    return await this.authService.updsertFcmToken({
+      token: token,
+      userId: id,
+    });
   }
 }

@@ -1,4 +1,10 @@
-import { HttpException, HttpStatus, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EntityManager, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -9,12 +15,15 @@ import { Response } from 'express';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { responseObj } from 'src/util/responseObj';
-import { AdminAccessTokenMaxAge, AdminRefreshTokenMaxAge } from 'src/util/getTokenMaxAge';
+import {
+  AdminAccessTokenMaxAge,
+  AdminRefreshTokenMaxAge,
+} from 'src/util/getTokenMaxAge';
 import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
 export class AuthService {
-constructor(
+  constructor(
     private readonly configService: ConfigService,
     @InjectRepository(Users)
     private readonly usersRepository: Repository<Users>,
@@ -22,21 +31,24 @@ constructor(
     private readonly jwtService: JwtService,
   ) {}
 
-    /**
+  /**
    * 관리자 로그인
    * @param {string} adminId 아이디
    * @param {string} password 비밀번호
    * @returns {{ accessToken: string; refreshToken: string }} 유저정보
    */
-  async userSiginIn(username: string, password: string, res: Response) {
+  async userSiginIn(username: string, password: string) {
     const user = await this.validateAdminUser({ username, password });
 
     if (!user) {
-      return res.send({
-        success: false,
-        message:
-          '아이디 또는 비밀번호를 잘못 입력했습니다. 입력하신 내용을 다시 확인해주세요.',
-      });
+      return responseObj.fail(
+        '아이디 또는 비밀번호를 잘못 입력했습니다. 입력하신 내용을 다시 확인해주세요.',
+      );
+      // return res.send({
+      //   success: false,
+      //   message:
+      //     '아이디 또는 비밀번호를 잘못 입력했습니다. 입력하신 내용을 다시 확인해주세요.',
+      // });
     }
 
     const payload = {
@@ -49,16 +61,21 @@ constructor(
     delete user.password;
     const result = { accessToken, refreshToken, user };
 
-    return res
-      .cookie('accessToken', result.accessToken, {
-        httpOnly: true,
-        maxAge: AdminAccessTokenMaxAge, // 6개월(180d) (60초 * 60분 * 24시간 * 30일 * 6개월 * 1000밀리초)
-      })
-      .cookie('refreshToken', result.refreshToken, {
-        httpOnly: true,
-        maxAge: AdminRefreshTokenMaxAge, // 12개월(360d) (60초 * 60분 * 24시간 * 30일 * 12개월 * 1000밀리초)
-      })
-      .send({ success: true, data: result.user });
+    return responseObj.success({
+      adminInfo: result.user,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    });
+    // return res
+    //   .cookie('accessToken', result.accessToken, {
+    //     httpOnly: false,
+    //     maxAge: AdminAccessTokenMaxAge, // 6개월(180d) (60초 * 60분 * 24시간 * 30일 * 6개월 * 1000밀리초)
+    //   })
+    //   .cookie('refreshToken', result.refreshToken, {
+    //     httpOnly: false,
+    //     maxAge: AdminRefreshTokenMaxAge, // 12개월(360d) (60초 * 60분 * 24시간 * 30일 * 12개월 * 1000밀리초)
+    //   })
+    //   .send({ success: true, data: result.user });
   }
 
   /**
@@ -67,22 +84,14 @@ constructor(
    * @returns {{ success:boolean; accessToken: string; refreshToken: string }} 유저정보
    */
   async userRegister(siginUpDto: RegisterDto) {
-
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-
-        /**  유저 정보 저장 */
-        await this.userInsertUser( 
-            siginUpDto,
-            queryRunner.manager,
-            
-        );
-        await queryRunner.commitTransaction();
-        return responseObj.success(null, '회원가입 성공');
-        
+      /**  유저 정보 저장 */
+      await this.userInsertUser(siginUpDto, queryRunner.manager);
+      await queryRunner.commitTransaction();
+      return responseObj.success(null, '회원가입 성공');
     } catch (e: any) {
       await queryRunner.rollbackTransaction();
       return responseObj.fail(e.message);
@@ -104,7 +113,6 @@ constructor(
     try {
       const user = await this.usersRepository.findOne({
         where: { username: username },
-     
       });
 
       if (!user) {
@@ -123,7 +131,6 @@ constructor(
     }
   }
 
-  
   /**
    * 관리자 미승인 시 최신정보 확인
    */
@@ -132,10 +139,9 @@ constructor(
       const { username } = req.user;
       const user = await this.usersRepository.findOne({
         where: { username: username },
-    
       });
       delete user.password;
-      
+
       return responseObj.success(user);
     } catch (e: any) {
       throw new HttpException(
@@ -144,7 +150,6 @@ constructor(
       );
     }
   }
-
 
   async refreshToken(refreshToken: string) {
     try {
@@ -158,7 +163,6 @@ constructor(
         {
           id: payload.id,
           username: payload.username,
-     
         },
         {
           secret: process.env.ADMIN_JWT_SECRET, // 액세스 토큰용 시크릿 키
@@ -187,7 +191,7 @@ constructor(
     }
   }
 
-    /** 유저 정보 저장 */
+  /** 유저 정보 저장 */
   userInsertUser = async (
     siginUpDto: RegisterDto,
     queryManager: EntityManager,
@@ -211,8 +215,20 @@ constructor(
     }
   };
 
+  /** FCM 토큰 업데이트 */
+  async updsertFcmToken({ userId, token }: { userId: string; token: string }) {
+    try {
+      await this.dataSource
+        .getRepository(Users)
+        .upsert({ id: userId, fcmToken: token }, ['id']);
+      return;
+    } catch (error) {
+      Logger.error(error);
+      return;
+    }
+  }
 
-   //  토큰 생성
+  //  토큰 생성
   createUserAccessToken = (payload: any) => {
     Logger.log('createUserAccessToken -> payload', payload);
     const ACCESS_TOKEN_EXPIRES = '180d'; //6개월

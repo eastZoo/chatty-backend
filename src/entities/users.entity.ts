@@ -23,6 +23,10 @@ export class Users {
   @Column()
   password: string;
 
+  // FCM 토큰 저장 필드 추가
+  @Column({ nullable: true })
+  fcmToken: string;
+
   @BeforeInsert()
   async setPassword() {
     this.password = await bcrypt.hash(this.password, 10);
