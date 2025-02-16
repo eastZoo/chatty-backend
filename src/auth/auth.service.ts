@@ -222,7 +222,7 @@ export class AuthService {
       console.log('token : ', token);
       await this.dataSource
         .getRepository(Users)
-        .upsert({ id: userId, fcmToken: token }, ['id']);
+        .update({ id: userId }, { fcmToken: token });
       return;
     } catch (error) {
       Logger.error(error);

@@ -75,8 +75,8 @@ export class AuthController {
   /**
    * 유저 FCM 토큰 등록
    */
-  @UseGuards(AccessTokenGuard)
   @Put('/update-fcm-token')
+  @UseGuards(AccessTokenGuard)
   async updateFcmToken(
     @Req() req: any,
     @Body() updateFcmTokenDto: UpdateFcmTokenDto,
@@ -84,6 +84,8 @@ export class AuthController {
     const { id } = req.user;
     const { token } = updateFcmTokenDto;
 
+    console.log('id : ', id);
+    console.log('token : ', token);
     return await this.authService.updsertFcmToken({
       token: token,
       userId: id,
