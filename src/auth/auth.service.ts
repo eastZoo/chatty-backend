@@ -1,4 +1,10 @@
-import { HttpException, HttpStatus, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EntityManager, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -9,12 +15,15 @@ import { Response } from 'express';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { responseObj } from 'src/util/responseObj';
-import { AdminAccessTokenMaxAge, AdminRefreshTokenMaxAge } from 'src/util/getTokenMaxAge';
+import {
+  AdminAccessTokenMaxAge,
+  AdminRefreshTokenMaxAge,
+} from 'src/util/getTokenMaxAge';
 import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
 export class AuthService {
-constructor(
+  constructor(
     private readonly configService: ConfigService,
     @InjectRepository(Users)
     private readonly usersRepository: Repository<Users>,
@@ -22,7 +31,7 @@ constructor(
     private readonly jwtService: JwtService,
   ) {}
 
-    /**
+  /**
    * 관리자 로그인
    * @param {string} adminId 아이디
    * @param {string} password 비밀번호
@@ -67,22 +76,14 @@ constructor(
    * @returns {{ success:boolean; accessToken: string; refreshToken: string }} 유저정보
    */
   async userRegister(siginUpDto: RegisterDto) {
-
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-
-        /**  유저 정보 저장 */
-        await this.userInsertUser( 
-            siginUpDto,
-            queryRunner.manager,
-            
-        );
-        await queryRunner.commitTransaction();
-        return responseObj.success(null, '회원가입 성공');
-        
+      /**  유저 정보 저장 */
+      await this.userInsertUser(siginUpDto, queryRunner.manager);
+      await queryRunner.commitTransaction();
+      return responseObj.success(null, '회원가입 성공');
     } catch (e: any) {
       await queryRunner.rollbackTransaction();
       return responseObj.fail(e.message);
@@ -104,7 +105,6 @@ constructor(
     try {
       const user = await this.usersRepository.findOne({
         where: { username: username },
-     
       });
 
       if (!user) {
@@ -123,7 +123,6 @@ constructor(
     }
   }
 
-  
   /**
    * 관리자 미승인 시 최신정보 확인
    */
@@ -132,10 +131,9 @@ constructor(
       const { username } = req.user;
       const user = await this.usersRepository.findOne({
         where: { username: username },
-    
       });
       delete user.password;
-      
+
       return responseObj.success(user);
     } catch (e: any) {
       throw new HttpException(
@@ -145,12 +143,11 @@ constructor(
     }
   }
 
-
   async refreshToken(refreshToken: string) {
     try {
       // 리프레시 토큰 검증
       const payload = this.jwtService.verify(refreshToken, {
-        secret: process.env.ADMIN_JWT_REFRESH_SECRET, // 리프레시 토큰용 시크릿 키
+        secret: this.configService.get<string>('ADMIN_JWT_REFRESH_SECRET'),
       });
 
       // 새로운 액세스 토큰 생성
@@ -158,10 +155,9 @@ constructor(
         {
           id: payload.id,
           username: payload.username,
-     
         },
         {
-          secret: process.env.ADMIN_JWT_SECRET, // 액세스 토큰용 시크릿 키
+          secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
           expiresIn: '180d', // 액세스 토큰 유효 기간 설정
         },
       );
@@ -173,7 +169,7 @@ constructor(
           username: payload.username,
         },
         {
-          secret: process.env.ADMIN_JWT_REFRESH_SECRET,
+          secret: this.configService.get<string>('ADMIN_JWT_REFRESH_SECRET'),
           expiresIn: '360d', // 리프레시 토큰 유효 기간 설정
         },
       );
@@ -187,7 +183,7 @@ constructor(
     }
   }
 
-    /** 유저 정보 저장 */
+  /** 유저 정보 저장 */
   userInsertUser = async (
     siginUpDto: RegisterDto,
     queryManager: EntityManager,
@@ -211,8 +207,7 @@ constructor(
     }
   };
 
-
-   //  토큰 생성
+  //  토큰 생성
   createUserAccessToken = (payload: any) => {
     Logger.log('createUserAccessToken -> payload', payload);
     const ACCESS_TOKEN_EXPIRES = '180d'; //6개월

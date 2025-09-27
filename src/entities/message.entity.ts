@@ -10,6 +10,8 @@ import { Chat } from './chat.entity';
 import { Users } from './users.entity';
 import { PrivateChat } from './private-chat.entity';
 
+// 코드 첨부 기능 제거됨
+
 @Entity()
 export class Message {
   @PrimaryGeneratedColumn('uuid')
@@ -17,6 +19,12 @@ export class Message {
 
   @Column('text')
   content: string;
+
+  @Column('simple-array', { nullable: true })
+  fileIds: string[];
+
+  // 파일 정보 (DB에 저장되지 않음, 조회 시에만 사용)
+  files?: any[];
 
   @ManyToOne(() => Chat, (chat) => chat.messages, { eager: true }) // eager 옵션 추가
   chat: Chat;

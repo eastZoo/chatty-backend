@@ -114,25 +114,45 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       userId: string;
       username: string;
       chatType: string;
+      fileIds?: string[];
+      fileAttachments?: any[];
     },
     @ConnectedSocket() client: Socket,
   ) {
+    console.log('data@@', data);
     try {
-      if (!data.chatId || !data.content || !data.userId) {
-        throw new Error('Missing required fields');
+      // fileAttachments에서 fileIds 추출
+      const fileIds =
+        data.fileIds || data.fileAttachments?.map((file) => file.id) || [];
+
+      if (!data.chatId || !data.userId) {
+        throw new Error(
+          'Missing required fields: chatId and userId are required',
+        );
+      }
+
+      // content가 없고 fileIds도 없으면 에러
+      if (!data.content && !fileIds.length) {
+        throw new Error('Either content or file attachments are required');
       }
 
       let savedMessage;
       if (data.chatType === 'private') {
+        Logger.log('createMessage112');
         savedMessage = await this.chatsService.createPrivateMessage(
           data.chatId,
           data.content,
           data.userId,
+          fileIds,
         );
       } else {
+        Logger.log('createMessage11');
         savedMessage = await this.messagesService.create(
           data.chatId,
-          { content: data.content },
+          {
+            content: data.content,
+            fileIds: fileIds,
+          },
           { id: data.userId, username: data.username } as any,
         );
       }

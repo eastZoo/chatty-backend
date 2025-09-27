@@ -76,6 +76,13 @@ export class ChatsService {
     return chat;
   }
 
+  // Chat의 updated_at 업데이트
+  async updateChatUpdatedAt(chatId: string): Promise<void> {
+    await this.chatsRepository.update(chatId, {
+      updatedAt: new Date(),
+    });
+  }
+
   // 1:1 채팅방 단순 조회 (존재 여부만 체크)
   async findPrivateChatById(chatId: string): Promise<PrivateChat> {
     const chat = await this.privateChatRepository.findOne({
@@ -194,6 +201,7 @@ export class ChatsService {
     roomId: string,
     content: string,
     senderId: string,
+    fileIds?: string[],
   ): Promise<Message> {
     // PrivateChat 객체 조회
     const privateChat = await this.privateChatRepository.findOne({
@@ -214,8 +222,23 @@ export class ChatsService {
       content,
       sender,
       privateChat,
+      fileIds: fileIds || null,
     });
-    return this.messageRepository.save(message);
+
+    // 메시지 저장
+    const savedMessage = await this.messageRepository.save(message);
+
+    // PrivateChat의 updated_at 업데이트
+    await this.privateChatRepository.update(
+      {
+        id: roomId,
+      },
+      {
+        updatedAt: new Date(),
+      },
+    );
+
+    return savedMessage;
   }
 
   /** 주어진 채팅방에 대해 사용자의 마지막 읽은 시각을 업데이트합니다. */

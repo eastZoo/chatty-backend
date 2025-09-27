@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 
@@ -7,7 +8,7 @@ export class RefreshTokenStrategy extends PassportStrategy(
   Strategy,
   'jwt-refresh',
 ) {
-   constructor() {
+  constructor(private configService: ConfigService) {
     super({
       jwtFromRequest: (req) => {
         if (req && req.cookies) {
@@ -15,7 +16,7 @@ export class RefreshTokenStrategy extends PassportStrategy(
         }
         return null;
       },
-      secretOrKey: process.env.ADMIN_JWT_REFRESH_SECRET, // 실제 시크릿 키로 변경
+      secretOrKey: configService.get<string>('ADMIN_JWT_REFRESH_SECRET'),
     });
   }
 
