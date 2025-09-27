@@ -158,9 +158,66 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
       this.server.to(data.chatId).emit('newMessage', savedMessage);
       console.log(`Broadcasted saved message to room ${data.chatId}`);
+
+      // 채팅방 목록 업데이트를 위한 이벤트 브로드캐스트
+      if (data.chatType === 'private') {
+        // 1:1 채팅의 경우 참여자들에게 채팅방 목록 업데이트 알림
+        const privateChat = await this.chatsService.findPrivateChatById(
+          data.chatId,
+        );
+        if (privateChat) {
+          // userA와 userB 모두에게 채팅방 목록 업데이트 알림
+          this.server.emit('chatListUpdate', {
+            type: 'private',
+            chatId: data.chatId,
+            message: savedMessage,
+          });
+        }
+      } else {
+        // 그룹 채팅의 경우 해당 채팅방 참여자들에게 알림
+        this.server.emit('chatListUpdate', {
+          type: 'group',
+          chatId: data.chatId,
+          message: savedMessage,
+        });
+      }
     } catch (error) {
       console.error('Error in handleSendMessage:', error);
       client.emit('errorMessage', { error: 'Failed to send message' });
+    }
+  }
+
+  @SubscribeMessage('markAsRead')
+  async handleMarkAsRead(
+    @MessageBody()
+    data: { chatId: string; chatType: 'group' | 'private'; userId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      if (!data.chatId || !data.chatType || !data.userId) {
+        throw new Error(
+          'Missing required fields: chatId, chatType, and userId are required',
+        );
+      }
+
+      // 읽음 상태 업데이트
+      await this.chatsService.markChatAsRead(
+        { id: data.userId } as any,
+        { id: data.chatId, chatType: data.chatType } as any,
+      );
+
+      // 채팅방 목록 업데이트를 위한 이벤트 브로드캐스트
+      this.server.emit('chatListUpdate', {
+        type: 'read',
+        chatId: data.chatId,
+        chatType: data.chatType,
+        userId: data.userId,
+      });
+
+      console.log(`Marked chat ${data.chatId} as read for user ${data.userId}`);
+    } catch (error) {
+      console.error('Error in handleMarkAsRead:', error);
+      client.emit('errorMessage', { error: 'Failed to mark as read' });
     }
   }
 
