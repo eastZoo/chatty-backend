@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { Message } from '../../entities/message.entity';
 import { ChatReadStatus } from '../../entities/chat-read-status.entity';
 import { Users } from 'src/entities/users.entity';
+import { FilesModule } from '../files/files.module';
 
 // src/chats/chats.module.ts
 @Module({
@@ -21,6 +22,7 @@ import { Users } from 'src/entities/users.entity';
       Users,
     ]),
     forwardRef(() => UsersModule),
+    forwardRef(() => FilesModule),
   ],
   providers: [ChatsService],
   controllers: [ChatsController],

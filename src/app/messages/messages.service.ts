@@ -50,6 +50,7 @@ export class MessagesService {
         chatType === 'group'
           ? { chat: { id: chat.id } }
           : { privateChat: { id: chat.id } },
+      relations: ['sender', 'chat', 'privateChat'], // sender와 chat 관계 포함
       order: { createdAt: 'ASC' },
     });
 
@@ -69,6 +70,7 @@ export class MessagesService {
                     mimetype: file.mimetype,
                     size: file.size,
                     url: file.url,
+                    downloadUrl: `/files/download/${file.id}`,
                   };
                 } catch (error) {
                   // 파일을 찾을 수 없는 경우 null 반환
@@ -127,6 +129,35 @@ export class MessagesService {
       where: { id: savedMessage.id },
       relations: ['sender', 'chat'], // sender의 전체 정보와 chat 관계를 가져옵니다.
     });
+
+    // 파일 정보 추가
+    if (fullMessage.fileIds && fullMessage.fileIds.length > 0) {
+      try {
+        const files = await Promise.all(
+          fullMessage.fileIds.map(async (fileId) => {
+            try {
+              const file = await this.filesService.getFileById(fileId);
+              return {
+                id: file.id,
+                originalName: file.originalName,
+                filename: file.filename,
+                mimetype: file.mimetype,
+                size: file.size,
+                url: file.url,
+                downloadUrl: `/files/download/${file.id}`,
+              };
+            } catch (error) {
+              return null;
+            }
+          }),
+        );
+        fullMessage.files = files.filter((file) => file !== null);
+      } catch (error) {
+        fullMessage.files = [];
+      }
+    } else {
+      fullMessage.files = [];
+    }
 
     // 여기서는 브로드캐스트를 하지 않고, chat.gateway.ts.의  handleSendMessage에서만 브로드캐스트하도록 합니다.
     return fullMessage;

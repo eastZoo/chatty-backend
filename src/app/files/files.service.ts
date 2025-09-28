@@ -25,23 +25,18 @@ export class FilesService {
       throw new Error('파일이 제공되지 않았습니다.');
     }
 
-    // 파일명을 UUID로 변경하여 중복 방지
-    const fileExtension = file.originalname.split('.').pop();
-    const newFilename = `${uuidv4()}.${fileExtension}`;
-    const filePath = join(this.uploadPath, newFilename);
-
-    // 파일을 uploads 디렉토리에 저장
-    const fs = require('fs').promises;
-    await fs.writeFile(filePath, file.buffer);
+    // multer에서 이미 파일이 저장되었으므로 파일명과 경로를 그대로 사용
+    const filename = file.filename;
+    const filePath = file.path;
 
     // 데이터베이스에 파일 정보 저장
     const fileEntity = this.fileRepository.create({
       originalName: file.originalname,
-      filename: newFilename,
+      filename: filename,
       mimetype: file.mimetype,
       size: file.size,
       path: filePath,
-      url: `/files/${newFilename}`,
+      url: `/static/${filename}`,
       uploadedBy: uploadedBy,
     });
 

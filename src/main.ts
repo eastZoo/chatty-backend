@@ -4,10 +4,17 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import * as cookieParser from 'cookie-parser';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+
+  // 정적 파일 서빙 설정 (CORS 문제 방지를 위해 다른 경로 사용)
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/static/',
+  });
 
   app.use(cookieParser()); // 쿠키 파서 미들웨어 적용
   app.enableCors({

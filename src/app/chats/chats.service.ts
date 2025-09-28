@@ -17,6 +17,8 @@ import { Message } from 'src/entities/message.entity';
 import { PrivateChat } from 'src/entities/private-chat.entity';
 import { ChatReadStatus } from 'src/entities/chat-read-status.entity';
 import { ChatReadDto } from './dto/chat-read.dto';
+import { FilesService } from '../files/files.service';
+import { Inject, forwardRef } from '@nestjs/common';
 
 @Injectable()
 export class ChatsService {
@@ -31,6 +33,8 @@ export class ChatsService {
     private usersRepository: Repository<Users>,
     @InjectRepository(ChatReadStatus)
     private chatReadStatusRepository: Repository<ChatReadStatus>,
+    @Inject(forwardRef(() => FilesService))
+    private filesService: FilesService,
   ) {}
 
   /**
@@ -238,7 +242,42 @@ export class ChatsService {
       },
     );
 
-    return savedMessage;
+    // 저장된 메시지를 다시 조회해 sender 정보와 파일 정보까지 포함한 완전한 메시지를 반환합니다.
+    const fullMessage = await this.messageRepository.findOne({
+      where: { id: savedMessage.id },
+      relations: ['sender', 'privateChat'], // sender와 privateChat 관계 포함
+    });
+
+    // 파일 정보 추가
+    if (fullMessage.fileIds && fullMessage.fileIds.length > 0) {
+      try {
+        const files = await Promise.all(
+          fullMessage.fileIds.map(async (fileId) => {
+            try {
+              const file = await this.filesService.getFileById(fileId);
+              return {
+                id: file.id,
+                originalName: file.originalName,
+                filename: file.filename,
+                mimetype: file.mimetype,
+                size: file.size,
+                url: file.url,
+                downloadUrl: `/files/download/${file.id}`,
+              };
+            } catch (error) {
+              return null;
+            }
+          }),
+        );
+        fullMessage.files = files.filter((file) => file !== null);
+      } catch (error) {
+        fullMessage.files = [];
+      }
+    } else {
+      fullMessage.files = [];
+    }
+
+    return fullMessage;
   }
 
   /** 주어진 채팅방에 대해 사용자의 마지막 읽은 시각을 업데이트합니다. */
