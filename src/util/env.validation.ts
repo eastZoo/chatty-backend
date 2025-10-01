@@ -53,6 +53,14 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   DB_TYPE?: string;
+
+  @IsOptional()
+  @IsString()
+  REDIS_HOST?: string;
+
+  @IsOptional()
+  @IsNumber()
+  REDIS_PORT?: number;
 }
 
 export function validate(config: Record<string, unknown>) {
@@ -69,6 +77,8 @@ export function validate(config: Record<string, unknown>) {
     DB_USERNAME: 'postgres',
     DB_PASSWORD: 'pehdwn5158@',
     DB_NAME: 'chatty',
+    REDIS_HOST: 'localhost',
+    REDIS_PORT: 6379,
     ...config,
   };
 

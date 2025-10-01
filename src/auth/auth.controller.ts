@@ -1,17 +1,25 @@
-import { Body, Post, Req, Res, UnauthorizedException, Controller, UseGuards, Get } from '@nestjs/common';
+import {
+  Body,
+  Post,
+  Req,
+  Res,
+  UnauthorizedException,
+  Controller,
+  UseGuards,
+  Get,
+} from '@nestjs/common';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Request, Response } from 'express';
-import { AdminAccessTokenMaxAge } from 'src/util/getTokenMaxAge';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { AccessTokenGuard } from './guards/access-token.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-    @ApiOperation({ summary: '로그인' })
+  @ApiOperation({ summary: '로그인' })
   @ApiResponse({
     status: 200,
     type: Boolean,
@@ -22,7 +30,7 @@ export class AuthController {
     return this.authService.userSiginIn(username, password, res);
   }
 
-    @ApiOperation({ summary: '회원가입' })
+  @ApiOperation({ summary: '회원가입' })
   @ApiResponse({
     status: 200,
     description: '회원가입',
@@ -33,14 +41,17 @@ export class AuthController {
     return this.authService.userRegister(siginUpDto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('/logout')
-  logout(@Res() res: Response) {
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
+  async logout(@Req() req: any, @Res() res: Response) {
+    const userId = req.user.id;
+    await this.authService.logout(userId);
+
+    res.clearCookie('chatty_refreshToken');
     res.send({ success: true });
   }
 
-  @UseGuards(AccessTokenGuard)
+  @UseGuards(JwtAuthGuard)
   @Get('/info')
   async getCurrentUser(@Req() req: any) {
     return this.authService.getCurrentUser(req);
@@ -48,16 +59,14 @@ export class AuthController {
 
   @Post('refresh-token')
   async refreshToken(@Req() req: Request, @Res() res: Response) {
-    const refreshToken = req.cookies['refreshToken'];
+    const refreshToken = req.cookies['chatty_refreshToken'];
     if (!refreshToken) {
       throw new UnauthorizedException('리프레시 토큰이 존재하지 않습니다.');
     }
-    const tokens = await this.authService.refreshToken(refreshToken);
-    res
-      .cookie('accessToken', tokens.accessToken, {
-        httpOnly: true,
-        maxAge: AdminAccessTokenMaxAge, // 1분 (60초 * 1000밀리초)
-      })
-      .send({ success: true });
+
+    const newAccessToken =
+      await this.authService.refreshAccessToken(refreshToken);
+
+    res.header('x-access-token', newAccessToken).send({ success: true });
   }
 }

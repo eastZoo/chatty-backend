@@ -11,3 +11,17 @@ services:
       - ${PORT}:${PORT}
     environment:
       - NODE_ENV=${NODE_ENV}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+
+  # Redis 서비스 추가 - 토큰 관리용
+  redis:
+    image: redis:7-alpine
+    container_name: ${PROJECT_NAME}-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - /home/redis:/data
+    command: redis-server --appendonly yes

@@ -15,11 +15,8 @@ import { Response } from 'express';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { responseObj } from 'src/util/responseObj';
-import {
-  AdminAccessTokenMaxAge,
-  AdminRefreshTokenMaxAge,
-} from 'src/util/getTokenMaxAge';
 import { RegisterDto } from './dto/register.dto';
+import { RedisService } from './redis.service';
 
 @Injectable()
 export class AuthService {
@@ -29,11 +26,12 @@ export class AuthService {
     private readonly usersRepository: Repository<Users>,
     private readonly dataSource: DataSource,
     private readonly jwtService: JwtService,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
-   * 관리자 로그인
-   * @param {string} adminId 아이디
+   * 사용자 로그인
+   * @param {string} username 아이디
    * @param {string} password 비밀번호
    * @returns {{ accessToken: string; refreshToken: string }} 유저정보
    */
@@ -53,21 +51,30 @@ export class AuthService {
       username: user.username,
     };
 
+    // Access Token 생성 (15분)
     const accessToken = this.createUserAccessToken(payload);
+    // Refresh Token 생성 (7일)
     const refreshToken = this.createUserRefreshToken(payload);
+
+    // Redis에 Refresh Token 저장 (30분 TTL)
+    await this.redisService.setRefreshToken(user.id, refreshToken, 1800); // 30분
+
     delete user.password;
     const result = { accessToken, refreshToken, user };
 
     return res
-      .cookie('accessToken', result.accessToken, {
+
+      .cookie('chatty_refreshToken', result.refreshToken, {
         httpOnly: true,
-        maxAge: AdminAccessTokenMaxAge, // 6개월(180d) (60초 * 60분 * 24시간 * 30일 * 6개월 * 1000밀리초)
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7일 (절대 기간)
       })
-      .cookie('refreshToken', result.refreshToken, {
-        httpOnly: true,
-        maxAge: AdminRefreshTokenMaxAge, // 12개월(360d) (60초 * 60분 * 24시간 * 30일 * 12개월 * 1000밀리초)
-      })
-      .send({ success: true, data: result.user });
+      .send({
+        success: true,
+        data: {
+          ...result.user,
+          accessToken: result.accessToken,
+        },
+      });
   }
 
   /**
@@ -143,14 +150,28 @@ export class AuthService {
     }
   }
 
-  async refreshToken(refreshToken: string) {
+  /**
+   * Access Token 재발급 (Refresh Token 검증 및 Redis TTL 갱신)
+   * @param refreshToken Refresh Token
+   * @returns 새로운 Access Token
+   */
+  async refreshAccessToken(refreshToken: string): Promise<string> {
     try {
-      // 리프레시 토큰 검증
+      // Refresh Token 검증
       const payload = this.jwtService.verify(refreshToken, {
         secret: this.configService.get<string>('ADMIN_JWT_REFRESH_SECRET'),
       });
 
-      // 새로운 액세스 토큰 생성
+      // Redis에서 Refresh Token 확인
+      const storedToken = await this.redisService.getRefreshToken(payload.id);
+      if (!storedToken || storedToken !== refreshToken) {
+        throw new UnauthorizedException('유효하지 않은 Refresh Token입니다.');
+      }
+
+      // Redis TTL 갱신 (30분 연장)
+      await this.redisService.refreshTokenTTL(payload.id, 1800); // 30분
+
+      // 새로운 Access Token 생성 (15분)
       const newAccessToken = this.jwtService.sign(
         {
           id: payload.id,
@@ -158,28 +179,13 @@ export class AuthService {
         },
         {
           secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
-          expiresIn: '180d', // 액세스 토큰 유효 기간 설정
+          expiresIn: '15m', // 15분
         },
       );
 
-      // 필요하다면 새로운 리프레시 토큰도 생성 가능
-      const newRefreshToken = this.jwtService.sign(
-        {
-          id: payload.id,
-          username: payload.username,
-        },
-        {
-          secret: this.configService.get<string>('ADMIN_JWT_REFRESH_SECRET'),
-          expiresIn: '360d', // 리프레시 토큰 유효 기간 설정
-        },
-      );
-
-      // 새로 생성한 토큰 반환
-      // return { accessToken: newAccessToken };
-      // 리프레시 토큰도 함께 반환하려면 아래처럼 반환
-      return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+      return newAccessToken;
     } catch (error) {
-      throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
+      throw new UnauthorizedException('유효하지 않은 Refresh Token입니다.');
     }
   }
 
@@ -207,20 +213,21 @@ export class AuthService {
     }
   };
 
-  //  토큰 생성
+  //  Access Token 생성 (15분)
   createUserAccessToken = (payload: any) => {
     Logger.log('createUserAccessToken -> payload', payload);
-    const ACCESS_TOKEN_EXPIRES = '180d'; //6개월
+    const ACCESS_TOKEN_EXPIRES = '15m'; // 15분
     const jwtSecretKey = this.configService.get('ADMIN_JWT_SECRET');
 
     return jwt.sign(payload, jwtSecretKey, {
       expiresIn: ACCESS_TOKEN_EXPIRES,
     });
   };
-  //  리프레쉬 토큰 생성
+
+  //  Refresh Token 생성 (7일)
   createUserRefreshToken = (payload: any) => {
     Logger.log('createUserRefreshToken -> payload', payload);
-    const REFRESH_TOKEN_EXPIRES = '360d'; //1년
+    const REFRESH_TOKEN_EXPIRES = '7d'; // 7일
     const jwtRefreshSecretKey = this.configService.get(
       'ADMIN_JWT_REFRESH_SECRET',
     );
@@ -229,4 +236,12 @@ export class AuthService {
       expiresIn: REFRESH_TOKEN_EXPIRES,
     });
   };
+
+  /**
+   * 로그아웃 처리 (Redis에서 Refresh Token 삭제)
+   * @param userId 사용자 ID
+   */
+  async logout(userId: string): Promise<void> {
+    await this.redisService.deleteRefreshToken(userId);
+  }
 }
