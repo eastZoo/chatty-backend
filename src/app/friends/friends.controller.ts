@@ -60,6 +60,8 @@ export class FriendsController {
   @UseGuards(AccessTokenGuard)
   async getFriends(@Req() req: RequestWithUser) {
     const user = req.user;
+
+    console.log('INgetFriends', user);
     return this.friendsService.getFriends(user);
   }
 }

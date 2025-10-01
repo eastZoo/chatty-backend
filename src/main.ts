@@ -23,6 +23,7 @@ async function bootstrap() {
     origin: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
+    exposedHeaders: ['x-access-token'], // 프론트엔드에서 접근 가능한 헤더 추가
   });
   app.useGlobalPipes(new ValidationPipe());
 

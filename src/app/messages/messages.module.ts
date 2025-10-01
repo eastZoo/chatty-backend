@@ -10,6 +10,8 @@ import { PrivateChat } from 'src/entities/private-chat.entity';
 import { Users } from 'src/entities/users.entity';
 import { ChatReadStatus } from 'src/entities/chat-read-status.entity';
 import { FilesModule } from '../files/files.module';
+import { AuthModule } from 'src/auth/auth.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { FilesModule } from '../files/files.module';
       ChatReadStatus,
     ]),
     forwardRef(() => FilesModule),
+    forwardRef(() => AuthModule),
+    ConfigModule,
   ],
   controllers: [MessagesController],
   providers: [MessagesService, ChatsService, ChatGateway],

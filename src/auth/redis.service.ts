@@ -34,7 +34,7 @@ export class RedisService {
   async setRefreshToken(
     userId: string,
     refreshToken: string,
-    ttl: number = 1800, // 30분
+    ttl: number = 30 * 60, // 30분
   ): Promise<void> {
     const key = `refresh_token:${userId}`;
     await this.redis.setex(key, ttl, refreshToken);
@@ -51,6 +51,17 @@ export class RedisService {
   async getRefreshToken(userId: string): Promise<string | null> {
     const key = `refresh_token:${userId}`;
     const token = await this.redis.get(key);
+
+    if (token) {
+      this.logger.log(
+        `✅ RedisService: Refresh Token 조회 성공 - User ID: ${userId}`,
+      );
+    } else {
+      this.logger.warn(
+        `❌ RedisService: Refresh Token 조회 실패 - User ID: ${userId}`,
+      );
+    }
+
     return token;
   }
 
@@ -59,14 +70,18 @@ export class RedisService {
    * @param userId 사용자 ID
    * @param ttl TTL (초) - 기본값: 30분 (1800초)
    */
-  async refreshTokenTTL(userId: string, ttl: number = 1800): Promise<void> {
+  async refreshTokenTTL(userId: string, ttl: number = 30 * 60): Promise<void> {
     const key = `refresh_token:${userId}`;
     const exists = await this.redis.exists(key);
 
     if (exists) {
       await this.redis.expire(key, ttl);
       this.logger.log(
-        `Refresh Token TTL 갱신 완료 - User ID: ${userId}, TTL: ${ttl}초`,
+        `🔄 RedisService: Refresh Token TTL 갱신 완료 - User ID: ${userId}, TTL: ${ttl}초 (${Math.floor(ttl / 60)}분)`,
+      );
+    } else {
+      this.logger.warn(
+        `⚠️ RedisService: Refresh Token이 존재하지 않음 - User ID: ${userId}`,
       );
     }
   }
@@ -89,6 +104,46 @@ export class RedisService {
   async getRefreshTokenTTL(userId: string): Promise<number> {
     const key = `refresh_token:${userId}`;
     return await this.redis.ttl(key);
+  }
+
+  /**
+   * 모든 Refresh Token 삭제 (강제 로그아웃)
+   * @returns 삭제된 토큰 개수
+   */
+  async deleteAllRefreshTokens(): Promise<number> {
+    const keys = await this.redis.keys('refresh_token:*');
+    if (keys.length > 0) {
+      await this.redis.del(...keys);
+      this.logger.log(`모든 Refresh Token 삭제 완료 - ${keys.length}개`);
+    }
+    return keys.length;
+  }
+
+  /**
+   * Redis 토큰 정보 조회
+   * @returns Redis 토큰 정보
+   */
+  async getRedisInfo(): Promise<any> {
+    const keys = await this.redis.keys('refresh_token:*');
+    const tokenInfo = [];
+
+    for (const key of keys) {
+      const userId = key.replace('refresh_token:', '');
+      const ttl = await this.redis.ttl(key);
+      const token = await this.redis.get(key);
+
+      tokenInfo.push({
+        userId,
+        ttl,
+        hasToken: !!token,
+        tokenPreview: token ? token.substring(0, 20) + '...' : null,
+      });
+    }
+
+    return {
+      totalTokens: keys.length,
+      tokens: tokenInfo,
+    };
   }
 
   /**

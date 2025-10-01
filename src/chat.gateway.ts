@@ -9,9 +9,18 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Injectable, forwardRef, Inject, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  forwardRef,
+  Inject,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { MessagesService } from './app/messages/messages.service';
 import { ChatsService } from './app/chats/chats.service'; // PrivateChat 관련 메서드가 있는 서비스
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { RedisService } from './auth/redis.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -27,10 +36,39 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private messagesService: MessagesService,
     @Inject(forwardRef(() => ChatsService))
     private chatsService: ChatsService,
+    private jwtService: JwtService,
+    private configService: ConfigService,
+    private redisService: RedisService,
   ) {}
 
-  handleConnection(client: Socket) {
-    console.log(`Client connected: ${client.id}`);
+  async handleConnection(client: Socket) {
+    try {
+      // 쿼리 파라미터에서 토큰 추출
+      const token = client.handshake.query.token as string;
+
+      if (!token) {
+        throw new UnauthorizedException('토큰이 없습니다.');
+      }
+
+      // 토큰 검증
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
+      });
+
+      // Redis에서 강제 로그아웃 확인
+      const refreshToken = await this.redisService.getRefreshToken(payload.id);
+      if (!refreshToken) {
+        throw new UnauthorizedException('강제 로그아웃된 사용자입니다.');
+      }
+
+      // 사용자 정보를 소켓에 저장
+      client.data.user = payload;
+      console.log(`Client connected: ${client.id}, User: ${payload.username}`);
+    } catch (error) {
+      console.error(`Connection failed: ${error.message}`);
+      client.emit('error', { message: '인증에 실패했습니다.' });
+      client.disconnect();
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -111,8 +149,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     data: {
       chatId: string;
       content: string;
-      userId: string;
-      username: string;
       chatType: string;
       fileIds?: string[];
       fileAttachments?: any[];
@@ -121,14 +157,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     console.log('data@@', data);
     try {
+      // 소켓에 저장된 사용자 정보 확인
+      const user = client.data.user;
+      if (!user) {
+        throw new UnauthorizedException('인증되지 않은 사용자입니다.');
+      }
+
       // fileAttachments에서 fileIds 추출
       const fileIds =
         data.fileIds || data.fileAttachments?.map((file) => file.id) || [];
 
-      if (!data.chatId || !data.userId) {
-        throw new Error(
-          'Missing required fields: chatId and userId are required',
-        );
+      if (!data.chatId) {
+        throw new Error('Missing required fields: chatId is required');
       }
 
       // content가 없고 fileIds도 없으면 에러
@@ -142,7 +182,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         savedMessage = await this.chatsService.createPrivateMessage(
           data.chatId,
           data.content,
-          data.userId,
+          user.id,
           fileIds,
         );
       } else {
@@ -153,7 +193,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             content: data.content,
             fileIds: fileIds,
           },
-          { id: data.userId, username: data.username } as any,
+          { id: user.id, username: user.username } as any,
         );
       }
       this.server.to(data.chatId).emit('newMessage', savedMessage);
@@ -190,19 +230,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('markAsRead')
   async handleMarkAsRead(
     @MessageBody()
-    data: { chatId: string; chatType: 'group' | 'private'; userId: string },
+    data: { chatId: string; chatType: 'group' | 'private' },
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      if (!data.chatId || !data.chatType || !data.userId) {
+      // 소켓에 저장된 사용자 정보 확인
+      const user = client.data.user;
+      if (!user) {
+        throw new UnauthorizedException('인증되지 않은 사용자입니다.');
+      }
+
+      if (!data.chatId || !data.chatType) {
         throw new Error(
-          'Missing required fields: chatId, chatType, and userId are required',
+          'Missing required fields: chatId and chatType are required',
         );
       }
 
       // 읽음 상태 업데이트
       await this.chatsService.markChatAsRead(
-        { id: data.userId } as any,
+        { id: user.id } as any,
         { id: data.chatId, chatType: data.chatType } as any,
       );
 
@@ -211,10 +257,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         type: 'read',
         chatId: data.chatId,
         chatType: data.chatType,
-        userId: data.userId,
+        userId: user.id,
       });
 
-      console.log(`Marked chat ${data.chatId} as read for user ${data.userId}`);
+      console.log(`Marked chat ${data.chatId} as read for user ${user.id}`);
     } catch (error) {
       console.error('Error in handleMarkAsRead:', error);
       client.emit('errorMessage', { error: 'Failed to mark as read' });

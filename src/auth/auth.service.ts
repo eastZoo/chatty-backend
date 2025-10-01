@@ -17,6 +17,11 @@ import * as jwt from 'jsonwebtoken';
 import { responseObj } from 'src/util/responseObj';
 import { RegisterDto } from './dto/register.dto';
 import { RedisService } from './redis.service';
+import {
+  AdminAccessTokenMaxAge,
+  AdminRefreshTokenMaxAge,
+  RedisRefreshTokenTTL,
+} from 'src/util/getTokenMaxAge';
 
 @Injectable()
 export class AuthService {
@@ -57,7 +62,11 @@ export class AuthService {
     const refreshToken = this.createUserRefreshToken(payload);
 
     // Redis에 Refresh Token 저장 (30분 TTL)
-    await this.redisService.setRefreshToken(user.id, refreshToken, 1800); // 30분
+    await this.redisService.setRefreshToken(
+      user.id,
+      refreshToken,
+      RedisRefreshTokenTTL,
+    ); // 30분
 
     delete user.password;
     const result = { accessToken, refreshToken, user };
@@ -66,7 +75,7 @@ export class AuthService {
 
       .cookie('chatty_refreshToken', result.refreshToken, {
         httpOnly: true,
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7일 (절대 기간)
+        maxAge: AdminRefreshTokenMaxAge, // 7일 (절대 기간)
       })
       .send({
         success: true,
@@ -151,6 +160,36 @@ export class AuthService {
   }
 
   /**
+   * Access Token만 생성 (Refresh Token 재발급 없음)
+   * @param userId 사용자 ID
+   * @returns 새로운 Access Token
+   */
+  async generateAccessToken(userId: string): Promise<string> {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('사용자를 찾을 수 없습니다.');
+    }
+
+    const payload = {
+      id: user.id,
+      username: user.username,
+    };
+
+    const token = this.jwtService.sign(payload, {
+      secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
+      expiresIn: '1m', // 1분 (테스트용)
+    });
+
+    console.log(
+      `✅ AuthService: 새로운 Access Token 생성 완료 - 사용자: ${user.username}`,
+    );
+    return token;
+  }
+
+  /**
    * Access Token 재발급 (Refresh Token 검증 및 Redis TTL 갱신)
    * @param refreshToken Refresh Token
    * @returns 새로운 Access Token
@@ -169,7 +208,7 @@ export class AuthService {
       }
 
       // Redis TTL 갱신 (30분 연장)
-      await this.redisService.refreshTokenTTL(payload.id, 1800); // 30분
+      await this.redisService.refreshTokenTTL(payload.id, 30 * 60); // 30분
 
       // 새로운 Access Token 생성 (15분)
       const newAccessToken = this.jwtService.sign(
@@ -179,7 +218,7 @@ export class AuthService {
         },
         {
           secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
-          expiresIn: '15m', // 15분
+          expiresIn: '1m', // 1분 (테스트용)
         },
       );
 
@@ -213,21 +252,25 @@ export class AuthService {
     }
   };
 
-  //  Access Token 생성 (15분)
+  //  Access Token 생성 (1분 - 테스트용)
   createUserAccessToken = (payload: any) => {
     Logger.log('createUserAccessToken -> payload', payload);
-    const ACCESS_TOKEN_EXPIRES = '15m'; // 15분
     const jwtSecretKey = this.configService.get('ADMIN_JWT_SECRET');
 
-    return jwt.sign(payload, jwtSecretKey, {
-      expiresIn: ACCESS_TOKEN_EXPIRES,
+    const token = jwt.sign(payload, jwtSecretKey, {
+      expiresIn: '1m', // 1분 (테스트용)
     });
+
+    console.log(
+      `🔑 AuthService: Access Token 생성 완료 (1분 만료) - 사용자: ${payload.username}`,
+    );
+    return token;
   };
 
   //  Refresh Token 생성 (7일)
   createUserRefreshToken = (payload: any) => {
     Logger.log('createUserRefreshToken -> payload', payload);
-    const REFRESH_TOKEN_EXPIRES = '7d'; // 7일
+    const REFRESH_TOKEN_EXPIRES = AdminRefreshTokenMaxAge; // 7일
     const jwtRefreshSecretKey = this.configService.get(
       'ADMIN_JWT_REFRESH_SECRET',
     );
@@ -243,5 +286,22 @@ export class AuthService {
    */
   async logout(userId: string): Promise<void> {
     await this.redisService.deleteRefreshToken(userId);
+  }
+
+  /**
+   * 모든 사용자 강제 로그아웃
+   * @returns 삭제된 토큰 개수
+   */
+  async logoutAll(): Promise<{ count: number }> {
+    const count = await this.redisService.deleteAllRefreshTokens();
+    return { count };
+  }
+
+  /**
+   * Redis 토큰 정보 조회
+   * @returns Redis 토큰 정보
+   */
+  async getRedisInfo(): Promise<any> {
+    return await this.redisService.getRedisInfo();
   }
 }

@@ -31,12 +31,14 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const token = authHeader.substring(7); // 'Bearer ' 제거
-
+    console.log('@@token', token);
     try {
       // 토큰 검증
       const payload = this.jwtService.verify(token, {
         secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
       });
+
+      console.log('payload', payload);
 
       // 토큰이 유효하면 사용자 정보를 request에 추가
       request.user = payload;

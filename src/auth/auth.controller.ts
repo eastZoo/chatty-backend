@@ -7,6 +7,8 @@ import {
   Controller,
   UseGuards,
   Get,
+  Delete,
+  Param,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -67,6 +69,53 @@ export class AuthController {
     const newAccessToken =
       await this.authService.refreshAccessToken(refreshToken);
 
+    console.log(
+      `📤 AuthController: refresh-token 엔드포인트에서 x-access-token 헤더 설정 - 토큰 길이: ${newAccessToken.length}`,
+    );
     res.header('x-access-token', newAccessToken).send({ success: true });
+  }
+
+  // ================================ redis test ================================
+  @ApiOperation({ summary: '특정 사용자 강제 로그아웃 (관리자용)' })
+  @ApiResponse({
+    status: 200,
+    description: '강제 로그아웃 성공',
+  })
+  @Delete('/force-logout/:userId')
+  async forceLogout(@Param('userId') userId: string) {
+    await this.authService.logout(userId);
+    return {
+      success: true,
+      message: `사용자 ${userId}가 강제 로그아웃되었습니다.`,
+    };
+  }
+
+  @ApiOperation({ summary: '모든 사용자 강제 로그아웃 (관리자용)' })
+  @ApiResponse({
+    status: 200,
+    description: '모든 사용자 강제 로그아웃 성공',
+  })
+  @Delete('/force-logout-all')
+  async forceLogoutAll() {
+    const result = await this.authService.logoutAll();
+    return {
+      success: true,
+      message: `모든 사용자(${result.count}명)가 강제 로그아웃되었습니다.`,
+      count: result.count,
+    };
+  }
+
+  @ApiOperation({ summary: 'Redis 토큰 정보 조회' })
+  @ApiResponse({
+    status: 200,
+    description: 'Redis 토큰 정보',
+  })
+  @Get('/redis-info')
+  async getRedisInfo() {
+    const info = await this.authService.getRedisInfo();
+    return {
+      success: true,
+      data: info,
+    };
   }
 }
