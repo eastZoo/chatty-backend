@@ -6,22 +6,56 @@ import Redis from 'ioredis';
 export class RedisService {
   private readonly logger = new Logger(RedisService.name);
   private readonly redis: Redis;
+  private isConnected = false;
 
   constructor(private readonly configService: ConfigService) {
     this.redis = new Redis({
       host: configService.get<string>('REDIS_HOST'),
       port: configService.get<number>('REDIS_PORT'),
       password: configService.get<string>('REDIS_PASSWORD'),
-      enableReadyCheck: false,
+      enableReadyCheck: true, // Redis ready 상태 확인 활성화
       maxRetriesPerRequest: null,
+      retryStrategy: (times) => {
+        // 재연결 전략: 지수 백오프 (최대 1초)
+        const delay = Math.min(times * 50, 1000);
+        return delay;
+      },
+      reconnectOnError: (err) => {
+        // 특정 에러 시에만 재연결
+        const targetError = 'READONLY';
+        if (err.message.includes(targetError)) {
+          return true;
+        }
+        return false;
+      },
+      keepAlive: 60000, // 60초마다 keep-alive 패킷 전송
+    });
+
+    // 초기 연결 성공 시에만 로그 출력
+    this.redis.on('ready', () => {
+      if (!this.isConnected) {
+        this.logger.log('Redis 연결 성공');
+        this.isConnected = true;
+      }
     });
 
     this.redis.on('connect', () => {
-      this.logger.log('Redis 연결 성공');
+      // connect 이벤트는 재연결 시에도 발생하므로 로그 제거
+      // ready 이벤트로 대체됨
+    });
+
+    this.redis.on('close', () => {
+      this.logger.warn('Redis 연결이 끊어졌습니다. 재연결 시도 중...');
+      this.isConnected = false;
     });
 
     this.redis.on('error', (error) => {
       this.logger.error('Redis 연결 오류:', error);
+      this.isConnected = false;
+    });
+
+    this.redis.on('reconnecting', () => {
+      this.logger.debug('Redis 재연결 시도 중...');
     });
   }
 
