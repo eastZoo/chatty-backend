@@ -61,24 +61,43 @@ class EnvironmentVariables {
   @IsOptional()
   @IsNumber()
   REDIS_PORT?: number;
+
+  @IsOptional()
+  @IsString()
+  REDIS_PASSWORD?: string;
 }
 
 export function validate(config: Record<string, unknown>) {
-  // 기본값 설정
-  const defaultConfig = {
+  const nodeEnv = (config.NODE_ENV as string) || 'development';
+  const isProduction = nodeEnv === 'production';
+
+  // 개발 환경에서만 사용할 수 있는 안전한 기본값 (localhost 등)
+  // 민감한 정보(비밀번호, 실제 호스트 등)는 기본값 없음
+  const defaultConfig: Record<string, unknown> = {
     NODE_ENV: 'development',
     PORT: 3001,
-    ADMIN_JWT_SECRET: 'your-default-jwt-secret-key-change-in-production',
-    ADMIN_JWT_REFRESH_SECRET:
-      'your-default-refresh-secret-key-change-in-production',
-    DB_TYPE: 'postgres',
-    DB_HOST: 'postgres.components.kr',
-    DB_PORT: 5432,
-    DB_USERNAME: 'postgres',
-    DB_PASSWORD: 'pehdwn5158@',
-    DB_NAME: 'chatty',
-    REDIS_HOST: 'localhost',
-    REDIS_PORT: 6379,
+    // 개발 환경에서만 JWT 시크릿 기본값 제공 (프로덕션에서는 필수)
+    ...(isProduction
+      ? {}
+      : {
+          ADMIN_JWT_SECRET: 'dev-jwt-secret-change-in-production',
+          ADMIN_JWT_REFRESH_SECRET: 'dev-refresh-secret-change-in-production',
+        }),
+    // 개발 환경에서만 DB 기본값 제공 (localhost)
+    ...(isProduction
+      ? {}
+      : {
+          DB_TYPE: 'postgres',
+          DB_HOST: 'localhost',
+          DB_PORT: 5432,
+        }),
+    // 개발 환경에서만 Redis 기본값 제공
+    ...(isProduction
+      ? {}
+      : {
+          REDIS_HOST: 'localhost',
+          REDIS_PORT: 6379,
+        }),
     ...config,
   };
 
@@ -92,5 +111,31 @@ export function validate(config: Record<string, unknown>) {
   if (errors.length > 0) {
     throw new Error(errors.toString());
   }
+
+  // 프로덕션 환경에서 필수 환경 변수 검증
+  if (isProduction) {
+    const requiredFields = [
+      'ADMIN_JWT_SECRET',
+      'ADMIN_JWT_REFRESH_SECRET',
+      'DB_HOST',
+      'DB_PORT',
+      'DB_USERNAME',
+      'DB_PASSWORD',
+      'DB_NAME',
+      'REDIS_HOST',
+      'REDIS_PORT',
+    ];
+
+    const missingFields = requiredFields.filter(
+      (field) => !validatedConfig[field],
+    );
+
+    if (missingFields.length > 0) {
+      throw new Error(
+        `프로덕션 환경에서 필수 환경 변수가 누락되었습니다: ${missingFields.join(', ')}`,
+      );
+    }
+  }
+
   return validatedConfig;
 }

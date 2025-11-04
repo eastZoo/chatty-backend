@@ -11,7 +11,7 @@ import { MessagesModule } from './app/messages/messages.module';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { join } from 'path';
 import { MulterModule } from '@nestjs/platform-express';
-import { validate } from './util/env.validation';
+// import { validate } from './util/env.validation';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { LoggerMiddleware } from './middleware/logger.middleware';
 import { FriendsModule } from './app/friends/friends.module';
@@ -21,10 +21,13 @@ import { FilesModule } from './app/files/files.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: process.env.NODE_ENV
-        ? `.env.${process.env.NODE_ENV}`
-        : '.env.development',
-      validate,
+      envFilePath: [
+        process.env.NODE_ENV
+          ? `.env.${process.env.NODE_ENV}`
+          : '.env.development',
+        '.env', // 기본 .env 파일도 확인
+      ],
+      // validate,
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],

@@ -9,9 +9,9 @@ export class RedisService {
 
   constructor(private readonly configService: ConfigService) {
     this.redis = new Redis({
-      host: 'redis.components.kr',
-      port: 6379,
-      password: 'rehdwn5158@', // ← 추가
+      host: configService.get<string>('REDIS_HOST'),
+      port: configService.get<number>('REDIS_PORT'),
+      password: configService.get<string>('REDIS_PASSWORD'),
       enableReadyCheck: false,
       maxRetriesPerRequest: null,
     });

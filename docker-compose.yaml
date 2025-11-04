@@ -5,8 +5,8 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - /home/insystem-api/files/${PROJECT_NAME}/uploads:/usr/src/app/uploads
-      - /home/insystem-api/files/${PROJECT_NAME}/files:/usr/src/app/files
+      - /home/eastzoo/Project/files/${PROJECT_NAME}/uploads:/usr/src/app/uploads
+      - /home/eastzoo/Project/files/${PROJECT_NAME}/files:/usr/src/app/files
     ports:
       - ${PORT}:${PORT}
     environment:
@@ -17,11 +17,11 @@ services:
       - redis
 
   # Redis 서비스 추가 - 토큰 관리용
-  redis:
-    image: redis:7-alpine
-    container_name: ${PROJECT_NAME}-redis
-    ports:
-      - '6379:6379'
-    volumes:
-      - /home/redis:/data
-    command: redis-server --appendonly yes
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: ${PROJECT_NAME}-redis
+  #   ports:
+  #     - '6379:6379'
+  #   volumes:
+  #     - /home/redis:/data
+  #   command: redis-server --appendonly yes
