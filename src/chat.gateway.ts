@@ -116,30 +116,80 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('getMessages')
   async handleGetMessages(
-    @MessageBody() data: { roomId: string; chatType: 'group' | 'private' },
+    @MessageBody()
+    data: {
+      roomId: string;
+      chatType: 'group' | 'private';
+      limit?: number;
+      cursor?: string;
+      direction?: 'latest' | 'before';
+    },
     @ConnectedSocket() client: Socket,
   ) {
-    const { roomId, chatType } = data;
+    const { roomId, chatType, limit = 20, cursor, direction = 'latest' } = data;
 
-    console.log('roomId', roomId);
-    console.log('chatType', chatType);
+    console.log('getMessages 요청:', {
+      roomId,
+      chatType,
+      limit,
+      cursor,
+      direction,
+    });
+
     try {
       if (!roomId || !chatType) {
-        throw new Error('roomId and chatType are required');
+        throw new Error('getMessages roomId and chatType are required');
       }
 
-      const messages = await this.messagesService.findAllByChat(
-        roomId,
-        chatType,
-      );
+      let messages;
+      let hasMore: boolean;
+      let newCursor: string | undefined;
 
-      client.emit('previousMessages', messages);
+      if (direction === 'latest') {
+        // 최신 메시지부터 limit 개 가져오기
+        messages = await this.messagesService.findLatestByChat(
+          roomId,
+          chatType,
+          limit,
+        );
+        // 첫 번째 메시지의 ID를 커서로 사용 (가장 오래된 메시지)
+        newCursor = messages.length > 0 ? messages[0].id : undefined;
+        // limit 개와 같으면 더 있을 가능성이 있음
+        hasMore = messages.length === limit;
+      } else {
+        // cursor 이전 메시지 가져오기
+        if (!cursor) {
+          throw new Error('cursor is required for before direction');
+        }
+        const result = await this.messagesService.findBeforeCursor(
+          roomId,
+          chatType,
+          cursor,
+          limit,
+        );
+        messages = result.messages;
+        hasMore = result.hasMore;
+        newCursor = result.newCursor;
+      }
+
+      // 새로운 형식으로 응답 (기존 형식과의 호환성 유지)
+      client.emit('previousMessages', {
+        messages,
+        hasMore,
+        cursor: newCursor,
+      });
+
       console.log(
-        `Sent previous messages for ${chatType} chat ${roomId} to socket ${client.id}`,
+        `getMessages Sent ${messages.length} messages (hasMore: ${hasMore}) for ${chatType} chat ${roomId} to socket ${client.id}`,
       );
     } catch (error) {
-      console.error('Error in handleGetMessages:', error);
-      client.emit('errorMessage', { error: 'Failed to retrieve messages' });
+      console.error('getMessages Error in handleGetMessages:', error);
+      client.emit('errorMessage', {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to retrieve messages',
+      });
     }
   }
 

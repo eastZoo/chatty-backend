@@ -97,6 +97,198 @@ export class MessagesService {
     return messagesWithFiles;
   }
 
+  /**
+   * 최신 메시지를 limit 개수만큼 가져오기
+   * @param chatId 채팅방 ID
+   * @param chatType 채팅 타입 ('group' | 'private')
+   * @param limit 가져올 메시지 수
+   * @returns 메시지 배열 (최신순)
+   */
+  async findLatestByChat(
+    chatId: string,
+    chatType: 'group' | 'private',
+    limit: number = 20,
+  ): Promise<Message[]> {
+    let chat;
+
+    if (chatType === 'group') {
+      chat = await this.chatsService.findById(chatId);
+    } else if (chatType === 'private') {
+      chat = await this.chatsService.findPrivateChatById(chatId);
+    }
+
+    if (!chat) {
+      throw new NotFoundException(`${chatType} Chat not found`);
+    }
+
+    // 최신 메시지부터 limit 개 가져오기 (DESC 정렬)
+    const messages = await this.messagesRepository.find({
+      where:
+        chatType === 'group'
+          ? { chat: { id: chat.id } }
+          : { privateChat: { id: chat.id } },
+      relations: ['sender', 'chat', 'privateChat'],
+      order: { createdAt: 'DESC' }, // 최신순
+      take: limit,
+    });
+
+    // 파일 정보 추가
+    const messagesWithFiles = await Promise.all(
+      messages.map(async (message) => {
+        if (message.fileIds && message.fileIds.length > 0) {
+          try {
+            const files = await Promise.all(
+              message.fileIds.map(async (fileId) => {
+                try {
+                  const file = await this.filesService.getFileById(fileId);
+                  return {
+                    id: file.id,
+                    originalName: file.originalName,
+                    filename: file.filename,
+                    mimetype: file.mimetype,
+                    size: file.size,
+                    url: file.url,
+                    downloadUrl: `/files/download/${file.id}`,
+                  };
+                } catch (error) {
+                  return null;
+                }
+              }),
+            );
+            message.files = files.filter((file) => file !== null);
+          } catch (error) {
+            Logger.error(
+              `Error fetching files for message ${message.id}:`,
+              error,
+            );
+            message.files = [];
+          }
+        } else {
+          message.files = [];
+        }
+        return message;
+      }),
+    );
+
+    // 역순으로 정렬하여 반환 (오래된 것부터)
+    return messagesWithFiles.reverse();
+  }
+
+  /**
+   * 커서 이전의 메시지를 limit 개수만큼 가져오기
+   * @param chatId 채팅방 ID
+   * @param chatType 채팅 타입 ('group' | 'private')
+   * @param cursor 커서 (메시지 ID)
+   * @param limit 가져올 메시지 수
+   * @returns 메시지 배열, hasMore 여부, 새로운 커서
+   */
+  async findBeforeCursor(
+    chatId: string,
+    chatType: 'group' | 'private',
+    cursor: string,
+    limit: number = 20,
+  ): Promise<{ messages: Message[]; hasMore: boolean; newCursor?: string }> {
+    let chat;
+
+    if (chatType === 'group') {
+      chat = await this.chatsService.findById(chatId);
+    } else if (chatType === 'private') {
+      chat = await this.chatsService.findPrivateChatById(chatId);
+    }
+
+    if (!chat) {
+      throw new NotFoundException(`${chatType} Chat not found`);
+    }
+
+    // 커서 메시지 조회 (createdAt 기준으로 이전 메시지 가져오기)
+    const cursorMessage = await this.messagesRepository.findOne({
+      where: { id: cursor },
+    });
+
+    if (!cursorMessage) {
+      throw new NotFoundException('Cursor message not found');
+    }
+
+    // 커서 메시지 이전의 메시지들을 가져오기 (limit + 1개로 가져와서 hasMore 판단)
+    const queryBuilder = this.messagesRepository
+      .createQueryBuilder('message')
+      .leftJoinAndSelect('message.sender', 'sender')
+      .leftJoinAndSelect('message.chat', 'chat')
+      .leftJoinAndSelect('message.privateChat', 'privateChat');
+
+    if (chatType === 'group') {
+      queryBuilder.where('message.chat = :chatId', { chatId: chat.id });
+    } else {
+      queryBuilder.where('message.privateChat = :chatId', { chatId: chat.id });
+    }
+
+    queryBuilder
+      .andWhere('message.createdAt < :cursorCreatedAt', {
+        cursorCreatedAt: cursorMessage.createdAt,
+      })
+      .orderBy('message.createdAt', 'DESC')
+      .take(limit + 1); // limit보다 1개 더 가져와서 hasMore 판단
+
+    const messages = await queryBuilder.getMany();
+
+    // 파일 정보 추가
+    const messagesWithFiles = await Promise.all(
+      messages.map(async (message) => {
+        if (message.fileIds && message.fileIds.length > 0) {
+          try {
+            const files = await Promise.all(
+              message.fileIds.map(async (fileId) => {
+                try {
+                  const file = await this.filesService.getFileById(fileId);
+                  return {
+                    id: file.id,
+                    originalName: file.originalName,
+                    filename: file.filename,
+                    mimetype: file.mimetype,
+                    size: file.size,
+                    url: file.url,
+                    downloadUrl: `/files/download/${file.id}`,
+                  };
+                } catch (error) {
+                  return null;
+                }
+              }),
+            );
+            message.files = files.filter((file) => file !== null);
+          } catch (error) {
+            Logger.error(
+              `Error fetching files for message ${message.id}:`,
+              error,
+            );
+            message.files = [];
+          }
+        } else {
+          message.files = [];
+        }
+        return message;
+      }),
+    );
+
+    // hasMore 판단: limit보다 많이 가져왔으면 더 있음
+    const hasMore = messagesWithFiles.length > limit;
+    const resultMessages = hasMore
+      ? messagesWithFiles.slice(0, limit)
+      : messagesWithFiles;
+
+    // 역순으로 정렬하여 반환 (오래된 것부터)
+    const reversedMessages = resultMessages.reverse();
+
+    // 새로운 커서는 가장 오래된 메시지의 ID
+    const newCursor =
+      reversedMessages.length > 0 ? reversedMessages[0].id : undefined;
+
+    return {
+      messages: reversedMessages,
+      hasMore,
+      newCursor,
+    };
+  }
+
   async create(
     chatId: string,
     createMessageDto: CreateMessageDto,
