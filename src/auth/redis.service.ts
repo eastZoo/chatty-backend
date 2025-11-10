@@ -1,12 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
 @Injectable()
-export class RedisService {
+export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private readonly redis: Redis;
   private isConnected = false;
+  private healthCheckInterval?: NodeJS.Timeout;
 
   constructor(private readonly configService: ConfigService) {
     this.redis = new Redis({
@@ -35,8 +36,9 @@ export class RedisService {
     this.redis.on('ready', () => {
       if (!this.isConnected) {
         this.logger.log('Redis 연결 성공');
-        this.isConnected = true;
       }
+      this.isConnected = true;
+      this.startHealthCheck();
     });
 
     this.redis.on('connect', () => {
@@ -47,11 +49,13 @@ export class RedisService {
     this.redis.on('close', () => {
       this.logger.warn('Redis 연결이 끊어졌습니다. 재연결 시도 중...');
       this.isConnected = false;
+      this.stopHealthCheck();
     });
 
     this.redis.on('error', (error) => {
       this.logger.error('Redis 연결 오류:', error);
       this.isConnected = false;
+      this.stopHealthCheck();
     });
 
     this.redis.on('reconnecting', () => {
@@ -184,7 +188,41 @@ export class RedisService {
    * Redis 연결 종료
    */
   async disconnect(): Promise<void> {
-    await this.redis.disconnect();
+    this.stopHealthCheck();
+    await this.redis.quit();
     this.logger.log('Redis 연결 종료');
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.isConnected) {
+      await this.disconnect();
+    }
+  }
+
+  private startHealthCheck(): void {
+    if (this.healthCheckInterval) {
+      return;
+    }
+
+    this.healthCheckInterval = setInterval(async () => {
+      try {
+        await this.redis.ping();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : JSON.stringify(error);
+        this.logger.warn(`Redis health check PING 실패: ${message}`);
+      }
+    }, 30000);
+
+    if (typeof this.healthCheckInterval.unref === 'function') {
+      this.healthCheckInterval.unref();
+    }
+  }
+
+  private stopHealthCheck(): void {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = undefined;
+    }
   }
 }
