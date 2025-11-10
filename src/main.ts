@@ -28,7 +28,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe());
 
   const config = new DocumentBuilder()
-    .setTitle('클립보드 공유웹 API')
+    .setTitle('개발자를 위한 채팅앱 API')
     .setDescription('')
     .setVersion('1.0')
     .build();
