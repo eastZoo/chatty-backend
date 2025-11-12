@@ -5,7 +5,7 @@ module.exports = {
   apps: [
     {
       name: process.env.PROJECT_NAME,
-      script: 'dist/src/main.js',
+      script: 'dist/main.js',
       env: {
         NODE_ENV: process.env.NODE_ENV,
         PORT: process.env.PORT,
