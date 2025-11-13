@@ -62,7 +62,7 @@ export class FilesController {
   }
 
   @Get(':fileId')
-  @UseGuards(AccessTokenGuard)
+  // @UseGuards(AccessTokenGuard)
   async downloadFile(@Param('fileId') fileId: string, @Res() res: Response) {
     try {
       Logger.log(fileId);
