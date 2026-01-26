@@ -23,6 +23,9 @@ export class Users {
   @Column()
   password: string;
 
+  @Column({ type: 'varchar', length: 20, default: 'USER' })
+  type: string; // 'USER' | 'ADMIN'
+
   @BeforeInsert()
   async setPassword() {
     this.password = await bcrypt.hash(this.password, 10);

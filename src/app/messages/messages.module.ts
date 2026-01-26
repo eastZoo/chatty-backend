@@ -28,5 +28,6 @@ import { ConfigModule } from '@nestjs/config';
   ],
   controllers: [MessagesController],
   providers: [MessagesService, ChatsService, ChatGateway],
+  exports: [MessagesService],
 })
 export class MessagesModule {}

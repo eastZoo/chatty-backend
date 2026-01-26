@@ -8,4 +8,5 @@ export interface RequestWithUser extends Request {
 export interface TokenUserInfo {
   id: Users['id'];
   username: Users['username'];
+  type: string; // 'USER' | 'ADMIN'
 }

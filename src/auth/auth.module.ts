@@ -11,6 +11,7 @@ import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
 import { RedisService } from './redis.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AccessTokenGuard } from './guards/access-token.guard';
+import { AdminGuard } from './guards/admin.guard';
 
 @Module({
   controllers: [AuthController],
@@ -23,14 +24,16 @@ import { AccessTokenGuard } from './guards/access-token.guard';
     RedisService,
     JwtAuthGuard,
     AccessTokenGuard,
+    AdminGuard,
     AuthService,
   ],
   exports: [
     RedisService,
     JwtAuthGuard,
     AccessTokenGuard,
+    AdminGuard,
     JwtService,
     AuthService,
-  ], // 다른 모듈에서 사용 가능하도록 export
+  ],
 })
 export class AuthModule {}

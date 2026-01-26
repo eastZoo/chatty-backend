@@ -54,6 +54,7 @@ export class AuthService {
     const payload = {
       id: user.id,
       username: user.username,
+      type: user.type || 'USER',
     };
 
     // Access Token 생성 (15분)
@@ -176,6 +177,7 @@ export class AuthService {
     const payload = {
       id: user.id,
       username: user.username,
+      type: user.type || 'USER',
     };
 
     const token = this.jwtService.sign(payload, {
@@ -210,11 +212,18 @@ export class AuthService {
       // Redis TTL 갱신 (30분 연장)
       await this.redisService.refreshTokenTTL(payload.id, 30 * 60); // 30분
 
+      // DB에서 최신 type 조회
+      const user = await this.usersRepository.findOne({
+        where: { id: payload.id },
+      });
+      const userType = user?.type || 'USER';
+
       // 새로운 Access Token 생성 (15분)
       const newAccessToken = this.jwtService.sign(
         {
           id: payload.id,
           username: payload.username,
+          type: userType,
         },
         {
           secret: this.configService.get<string>('ADMIN_JWT_SECRET'),

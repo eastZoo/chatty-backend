@@ -354,4 +354,18 @@ export class MessagesService {
     // 여기서는 브로드캐스트를 하지 않고, chat.gateway.ts.의  handleSendMessage에서만 브로드캐스트하도록 합니다.
     return fullMessage;
   }
+
+  /**
+   * 지정한 시간(분 단위)보다 오래된 모든 메시지 삭제 (그룹 채팅 + 1:1 채팅)
+   */
+  async deleteMessagesOlderThanMinutes(minutes: number): Promise<number> {
+    if (minutes <= 0) return 0;
+    const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+    const result = await this.messagesRepository
+      .createQueryBuilder()
+      .delete()
+      .where('created_at < :cutoff', { cutoff: cutoff.toISOString() })
+      .execute();
+    return result.affected ?? 0;
+  }
 }

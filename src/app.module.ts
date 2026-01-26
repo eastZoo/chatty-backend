@@ -2,6 +2,7 @@
 import { Module, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -16,9 +17,11 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { LoggerMiddleware } from './middleware/logger.middleware';
 import { FriendsModule } from './app/friends/friends.module';
 import { FilesModule } from './app/files/files.module';
+import { SettingsModule } from './app/settings/settings.module';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [
@@ -72,6 +75,7 @@ import { FilesModule } from './app/files/files.module';
     MessagesModule,
     FriendsModule,
     FilesModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [
