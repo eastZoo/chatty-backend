@@ -368,4 +368,15 @@ export class MessagesService {
       .execute();
     return result.affected ?? 0;
   }
+
+  /**
+   * 모든 메시지 삭제 (오후 6시 일일 삭제 작업용)
+   */
+  async deleteAllMessages(): Promise<number> {
+    const result = await this.messagesRepository
+      .createQueryBuilder()
+      .delete()
+      .execute();
+    return result.affected ?? 0;
+  }
 }

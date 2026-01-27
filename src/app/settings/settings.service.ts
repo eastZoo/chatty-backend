@@ -70,4 +70,24 @@ export class SettingsService {
       this.logger.log(`채팅 자동 삭제 완료: ${deleted}건 삭제`);
     }
   }
+
+  /** 매일 오후 6시 실행: 모든 이전 채팅 기록 삭제 */
+  @Cron('0 18 * * *')
+  async runDailyChatDelete(): Promise<void> {
+    this.logger.log('오후 6시 일일 채팅 삭제 작업 시작: 모든 이전 채팅 기록 삭제');
+    
+    try {
+      // 현재 시간 이전의 모든 메시지 삭제 (매우 큰 값으로 설정하여 모든 메시지 삭제)
+      // 또는 특정 날짜 이전의 메시지만 삭제하려면 날짜를 지정할 수 있습니다
+      const deleted = await this.messagesService.deleteAllMessages();
+      
+      if (deleted > 0) {
+        this.logger.log(`오후 6시 일일 채팅 삭제 완료: ${deleted}건 삭제`);
+      } else {
+        this.logger.log('오후 6시 일일 채팅 삭제: 삭제할 메시지가 없습니다');
+      }
+    } catch (error) {
+      this.logger.error('오후 6시 일일 채팅 삭제 중 오류 발생:', error);
+    }
+  }
 }
