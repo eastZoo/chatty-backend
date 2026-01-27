@@ -20,7 +20,7 @@ import { ChatReadDto } from './dto/chat-read.dto';
 import { FilesService } from '../files/files.service';
 import { Inject, forwardRef } from '@nestjs/common';
 import { FcmToken } from 'src/entities/fcm-token.entity';
-import admin from 'src/firebase/firebase-admin';
+import * as admin from 'firebase-admin';
 
 @Injectable()
 export class ChatsService {
@@ -39,6 +39,8 @@ export class ChatsService {
     private fcmTokenRepository: Repository<FcmToken>,
     @Inject(forwardRef(() => FilesService))
     private filesService: FilesService,
+    @Inject('FIREBASE_ADMIN')
+    private readonly firebaseAdmin: typeof admin,
   ) {}
 
   /**
@@ -339,6 +341,8 @@ export class ChatsService {
 
       if (!targetUserId) return;
 
+      console.log('!! TRAGET: ', targetUserId);
+
       const tokens = await this.fcmTokenRepository.find({
         where: { user: { id: targetUserId } },
       });
@@ -346,6 +350,8 @@ export class ChatsService {
       if (tokens.length === 0) return;
 
       const registrationTokens = tokens.map((t) => t.token);
+
+      console.log('!! TOKEN: ', registrationTokens);
 
       const message: admin.messaging.MulticastMessage = {
         tokens: registrationTokens,
@@ -361,7 +367,7 @@ export class ChatsService {
       // 3️⃣ Push 발송
       const response = await admin.messaging().sendEachForMulticast(message);
 
-      // 4️⃣ 실패한 토큰 정리 (⭐ 실무 필수)
+      // 4️⃣ 실패한 토큰 정리
       const failedTokens: string[] = [];
 
       response.responses.forEach((res, idx) => {

@@ -1,8 +1,24 @@
 import * as admin from 'firebase-admin';
-import * as serviceAccount from '../config/chatty-39651-firebase-adminsdk-fbsvc-e39b95e308.json';
+import { ConfigService } from '@nestjs/config';
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-});
+export const FirebaseAdminProvider = {
+  provide: 'FIREBASE_ADMIN',
+  inject: [ConfigService],
+  useFactory: (configService: ConfigService) => {
+    if (admin.apps.length === 0) {
+      const raw = configService.get<string>('FIREBASE_SERVICE_ACCOUNT_JSON');
 
-export default admin;
+      if (!raw) {
+        throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not defined');
+      }
+
+      const serviceAccount = JSON.parse(raw);
+
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+    }
+
+    return admin;
+  },
+};

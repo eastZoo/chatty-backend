@@ -13,6 +13,7 @@ import { FilesModule } from '../files/files.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { FcmToken } from 'src/entities/fcm-token.entity';
+import { FirebaseModule } from 'src/firebase/firebase.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { FcmToken } from 'src/entities/fcm-token.entity';
       ChatReadStatus,
       FcmToken,
     ]),
+    FirebaseModule,
     forwardRef(() => FilesModule),
     forwardRef(() => AuthModule),
     ConfigModule,

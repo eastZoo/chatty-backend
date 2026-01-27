@@ -18,6 +18,7 @@ import { LoggerMiddleware } from './middleware/logger.middleware';
 import { FriendsModule } from './app/friends/friends.module';
 import { FilesModule } from './app/files/files.module';
 import { SettingsModule } from './app/settings/settings.module';
+import { FirebaseModule } from './firebase/firebase.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { SettingsModule } from './app/settings/settings.module';
     FriendsModule,
     FilesModule,
     SettingsModule,
+    FirebaseModule,
   ],
   controllers: [AppController],
   providers: [

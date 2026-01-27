@@ -12,6 +12,7 @@ import { Users } from 'src/entities/users.entity';
 import { FilesModule } from '../files/files.module';
 import { AuthModule } from '../../auth/auth.module';
 import { FcmToken } from 'src/entities/fcm-token.entity';
+import { FirebaseModule } from 'src/firebase/firebase.module';
 
 // src/chats/chats.module.ts
 @Module({
@@ -24,6 +25,7 @@ import { FcmToken } from 'src/entities/fcm-token.entity';
       Users,
       FcmToken,
     ]),
+    FirebaseModule,
     forwardRef(() => UsersModule),
     forwardRef(() => FilesModule),
     forwardRef(() => AuthModule),
