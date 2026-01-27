@@ -21,6 +21,7 @@ import { ChatsService } from './app/chats/chats.service'; // PrivateChat 관련 
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from './auth/redis.service';
+import { AuthService } from './auth/auth.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -39,6 +40,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private jwtService: JwtService,
     private configService: ConfigService,
     private redisService: RedisService,
+    private authService: AuthService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -50,16 +52,54 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         throw new UnauthorizedException('토큰이 없습니다.');
       }
 
-      // 토큰 검증
-      const payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
-      });
+      let payload: any;
+      let accessToken = token;
+
+      try {
+        // 토큰 검증
+        payload = this.jwtService.verify(token, {
+          secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
+        });
+      } catch (verifyError) {
+        // 토큰이 만료되었거나 유효하지 않은 경우
+        console.log(`토큰 검증 실패, 재발급 시도: ${verifyError.message}`);
+        
+        // 토큰에서 userId 추출 시도 (만료된 토큰도 decode 가능)
+        const decoded = this.jwtService.decode(token) as any;
+        if (!decoded || !decoded.id) {
+          throw new UnauthorizedException('유효하지 않은 토큰입니다.');
+        }
+
+        // Redis에서 Refresh Token 확인
+        const refreshToken = await this.redisService.getRefreshToken(decoded.id);
+        if (!refreshToken) {
+          throw new UnauthorizedException('Refresh Token이 없습니다.');
+        }
+
+        // 새로운 Access Token 발급
+        accessToken = await this.authService.generateAccessToken(decoded.id);
+
+        // 새로운 토큰으로 검증
+        payload = this.jwtService.verify(accessToken, {
+          secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
+        });
+
+        // Redis TTL 갱신
+        await this.redisService.refreshTokenTTL(decoded.id);
+
+        // 클라이언트에 새로운 토큰 전달
+        client.emit('token-refreshed', { token: accessToken });
+        console.log(`새로운 Access Token 발급 및 소켓 연결 허용: ${payload.username}`);
+      }
 
       // Redis에서 강제 로그아웃 확인
       const refreshToken = await this.redisService.getRefreshToken(payload.id);
       if (!refreshToken) {
         throw new UnauthorizedException('강제 로그아웃된 사용자입니다.');
       }
+
+      // Redis TTL 갱신 (30분 연장)
+      await this.redisService.refreshTokenTTL(payload.id);
 
       // 사용자 정보를 소켓에 저장
       client.data.user = payload;

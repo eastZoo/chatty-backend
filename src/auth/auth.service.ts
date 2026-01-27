@@ -182,7 +182,7 @@ export class AuthService {
 
     const token = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
-      expiresIn: '1m', // 1분 (테스트용)
+      expiresIn: '15m', // 15분
     });
 
     console.log(
@@ -227,7 +227,7 @@ export class AuthService {
         },
         {
           secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
-          expiresIn: '1m', // 1분 (테스트용)
+          expiresIn: '15m', // 15분
         },
       );
 
@@ -261,17 +261,17 @@ export class AuthService {
     }
   };
 
-  //  Access Token 생성 (1분 - 테스트용)
+  //  Access Token 생성 (15분)
   createUserAccessToken = (payload: any) => {
     Logger.log('createUserAccessToken -> payload', payload);
     const jwtSecretKey = this.configService.get('ADMIN_JWT_SECRET');
 
     const token = jwt.sign(payload, jwtSecretKey, {
-      expiresIn: '1m', // 1분 (테스트용)
+      expiresIn: '15m', // 15분
     });
 
     console.log(
-      `🔑 AuthService: Access Token 생성 완료 (1분 만료) - 사용자: ${payload.username}`,
+      `🔑 AuthService: Access Token 생성 완료 (15분 만료) - 사용자: ${payload.username}`,
     );
     return token;
   };
