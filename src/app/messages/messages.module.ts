@@ -12,6 +12,7 @@ import { ChatReadStatus } from 'src/entities/chat-read-status.entity';
 import { FilesModule } from '../files/files.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
+import { FcmToken } from 'src/entities/fcm-token.entity';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ConfigModule } from '@nestjs/config';
       PrivateChat,
       Users,
       ChatReadStatus,
+      FcmToken,
     ]),
     forwardRef(() => FilesModule),
     forwardRef(() => AuthModule),

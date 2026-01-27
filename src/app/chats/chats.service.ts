@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Chat, ChatType } from '../../entities/chat.entity';
+import { Chat } from '../../entities/chat.entity';
 import { Repository } from 'typeorm';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { UpdateChatDto } from './dto/update-chat.dto';
@@ -19,6 +19,8 @@ import { ChatReadStatus } from 'src/entities/chat-read-status.entity';
 import { ChatReadDto } from './dto/chat-read.dto';
 import { FilesService } from '../files/files.service';
 import { Inject, forwardRef } from '@nestjs/common';
+import { FcmToken } from 'src/entities/fcm-token.entity';
+import admin from 'src/firebase/firebase-admin';
 
 @Injectable()
 export class ChatsService {
@@ -33,6 +35,8 @@ export class ChatsService {
     private usersRepository: Repository<Users>,
     @InjectRepository(ChatReadStatus)
     private chatReadStatusRepository: Repository<ChatReadStatus>,
+    @InjectRepository(FcmToken)
+    private fcmTokenRepository: Repository<FcmToken>,
     @Inject(forwardRef(() => FilesService))
     private filesService: FilesService,
   ) {}
@@ -54,11 +58,7 @@ export class ChatsService {
   }
 
   // 채팅방 업데이트 – 필요 시 원래 채팅방 작성자만 업데이트하도록 제한할 수 있음
-  async update(
-    id: string,
-    updateChatDto: UpdateChatDto,
-    user: Users,
-  ): Promise<Chat> {
+  async update(id: string, updateChatDto: UpdateChatDto): Promise<Chat> {
     const chat = await this.chatsRepository.findOne({ where: { id } });
     if (!chat) {
       throw new NotFoundException('Chat not found');
@@ -315,6 +315,69 @@ export class ChatsService {
         // lastReadAt: new Date(),
       });
       await this.chatReadStatusRepository.save(readStatus);
+    }
+  }
+
+  /**
+   * PUSH 알람 발송
+   */
+  async sendPushAlarms(data: {
+    chatId: string;
+    content: string;
+    userId: string; // 메시지 보낸 사람
+  }) {
+    try {
+      // 1️⃣ 채팅방 조회
+      const { userA, userB } = await this.privateChatRepository.findOne({
+        where: { id: data.chatId },
+      });
+
+      if (!userA || !userB) return;
+
+      // 2️⃣ 받는 사람 결정 (보낸 사람 제외)
+      const targetUserId = data.userId === userA.id ? userB.id : userA.id;
+
+      if (!targetUserId) return;
+
+      const tokens = await this.fcmTokenRepository.find({
+        where: { user: { id: targetUserId } },
+      });
+
+      if (tokens.length === 0) return;
+
+      const registrationTokens = tokens.map((t) => t.token);
+
+      const message: admin.messaging.MulticastMessage = {
+        tokens: registrationTokens,
+        notification: {
+          title: 'Chatty',
+          body: '새로운 메세지가 있습니다.',
+        },
+        data: {
+          type: 'chat',
+        },
+      };
+
+      // 3️⃣ Push 발송
+      const response = await admin.messaging().sendEachForMulticast(message);
+
+      // 4️⃣ 실패한 토큰 정리 (⭐ 실무 필수)
+      const failedTokens: string[] = [];
+
+      response.responses.forEach((res, idx) => {
+        if (!res.success) {
+          failedTokens.push(registrationTokens[idx]);
+        }
+      });
+
+      if (failedTokens.length > 0) {
+        await this.fcmTokenRepository.delete({
+          token: failedTokens as any,
+        });
+      }
+    } catch (error) {
+      console.log('!! SEND ERROR: ', error);
+      throw new InternalServerErrorException('Error Push Alarms');
     }
   }
 }

@@ -11,6 +11,7 @@ import { ChatReadStatus } from '../../entities/chat-read-status.entity';
 import { Users } from 'src/entities/users.entity';
 import { FilesModule } from '../files/files.module';
 import { AuthModule } from '../../auth/auth.module';
+import { FcmToken } from 'src/entities/fcm-token.entity';
 
 // src/chats/chats.module.ts
 @Module({
@@ -21,6 +22,7 @@ import { AuthModule } from '../../auth/auth.module';
       Message,
       ChatReadStatus,
       Users,
+      FcmToken,
     ]),
     forwardRef(() => UsersModule),
     forwardRef(() => FilesModule),
