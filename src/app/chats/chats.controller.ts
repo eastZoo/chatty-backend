@@ -66,12 +66,8 @@ export class ChatsController {
 
   @UseGuards(AccessTokenGuard)
   @Patch(':id')
-  async update(
-    @Param('id') id: string,
-    @Body() updateChatDto: UpdateChatDto,
-    @Req() req,
-  ) {
-    return this.chatsService.update(id, updateChatDto, req.user);
+  async update(@Param('id') id: string, @Body() updateChatDto: UpdateChatDto) {
+    return this.chatsService.update(id, updateChatDto);
   }
 
   // 채팅방 읽음 상태 업데이트 엔드포인트
@@ -85,5 +81,22 @@ export class ChatsController {
     const user = req.user;
     await this.chatsService.markChatAsRead(user, chat);
     return { success: true };
+  }
+
+  // PUSH 알람 전송
+  @Post('/send/push')
+  @UseGuards(AccessTokenGuard)
+  async sendPushAlrams(
+    @Req() req: RequestWithUser,
+    @Body()
+    data: {
+      chatId: string;
+      content: string;
+    },
+  ) {
+    return await this.chatsService.sendPushAlarms({
+      ...data,
+      userId: req.user.id,
+    });
   }
 }

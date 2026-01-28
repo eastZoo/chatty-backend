@@ -18,10 +18,10 @@ import { responseObj } from 'src/util/responseObj';
 import { RegisterDto } from './dto/register.dto';
 import { RedisService } from './redis.service';
 import {
-  AdminAccessTokenMaxAge,
   AdminRefreshTokenMaxAge,
   RedisRefreshTokenTTL,
 } from 'src/util/getTokenMaxAge';
+import { FcmToken } from 'src/entities/fcm-token.entity';
 
 @Injectable()
 export class AuthService {
@@ -29,6 +29,8 @@ export class AuthService {
     private readonly configService: ConfigService,
     @InjectRepository(Users)
     private readonly usersRepository: Repository<Users>,
+    @InjectRepository(FcmToken)
+    private readonly fcmTokenRepository: Repository<FcmToken>,
     private readonly dataSource: DataSource,
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
@@ -40,7 +42,12 @@ export class AuthService {
    * @param {string} password 비밀번호
    * @returns {{ accessToken: string; refreshToken: string }} 유저정보
    */
-  async userSiginIn(username: string, password: string, res: Response) {
+  async userSiginIn(
+    username: string,
+    password: string,
+    fcmToken: string,
+    res: Response,
+  ) {
     const user = await this.validateAdminUser({ username, password });
 
     if (!user) {
@@ -71,6 +78,14 @@ export class AuthService {
 
     delete user.password;
     const result = { accessToken, refreshToken, user };
+
+    await this.fcmTokenRepository.upsert(
+      {
+        token: fcmToken,
+        user: { id: user.id },
+      },
+      ['token'],
+    );
 
     return res
 
