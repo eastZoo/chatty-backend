@@ -109,8 +109,8 @@ export class MessagesService {
     chatType: 'group' | 'private',
     limit: number = 20,
   ): Promise<Message[]> {
+    // 채팅방 존재 여부 확인
     let chat;
-
     if (chatType === 'group') {
       chat = await this.chatsService.findById(chatId);
     } else if (chatType === 'private') {
@@ -121,16 +121,23 @@ export class MessagesService {
       throw new NotFoundException(`${chatType} Chat not found`);
     }
 
-    // 최신 메시지부터 limit 개 가져오기 (DESC 정렬)
-    const messages = await this.messagesRepository.find({
-      where:
-        chatType === 'group'
-          ? { chat: { id: chat.id } }
-          : { privateChat: { id: chat.id } },
-      relations: ['sender', 'chat', 'privateChat'],
-      order: { createdAt: 'DESC' }, // 최신순
-      take: limit,
-    });
+    // QueryBuilder를 사용하여 더 명확하고 안정적인 쿼리 작성
+    const queryBuilder = this.messagesRepository
+      .createQueryBuilder('message')
+      .leftJoinAndSelect('message.sender', 'sender')
+      .leftJoinAndSelect('message.chat', 'chat')
+      .leftJoinAndSelect('message.privateChat', 'privateChat')
+      .orderBy('message.createdAt', 'DESC') // 최신순
+      .take(limit);
+
+    // 채팅 타입에 따라 조건 추가
+    if (chatType === 'group') {
+      queryBuilder.where('message.chat = :chatId', { chatId: chat.id });
+    } else {
+      queryBuilder.where('message.privateChat = :chatId', { chatId: chat.id });
+    }
+
+    const messages = await queryBuilder.getMany();
 
     // 파일 정보 추가
     const messagesWithFiles = await Promise.all(
