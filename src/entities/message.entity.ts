@@ -5,6 +5,7 @@ import {
   Column,
   ManyToOne,
   CreateDateColumn,
+  JoinColumn,
 } from 'typeorm';
 import { Chat } from './chat.entity';
 import { Users } from './users.entity';
@@ -39,6 +40,11 @@ export class Message {
   // 새롭게 추가: 메시지의 작성자 (사용자)
   @ManyToOne(() => Users, (user) => user.messages, { eager: true })
   sender: Users;
+
+  // 새롭게 추가: 답장 타겟
+  @ManyToOne(() => Message, { nullable: true })
+  @JoinColumn({ name: 'reply_target_id' })
+  replyTarget?: Message;
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;

@@ -207,6 +207,7 @@ export class ChatsService {
     roomId: string,
     content: string,
     senderId: string,
+    replyTargetId?: string,
     fileIds?: string[],
   ): Promise<Message> {
     // PrivateChat 객체 조회
@@ -224,10 +225,14 @@ export class ChatsService {
     if (!sender) {
       throw new BadRequestException('Sender not found');
     }
+
     const message = this.messageRepository.create({
       content,
       sender,
       privateChat,
+      replyTarget: {
+        id: replyTargetId || null,
+      },
       fileIds: fileIds || null,
     });
 
@@ -247,7 +252,7 @@ export class ChatsService {
     // 저장된 메시지를 다시 조회해 sender 정보와 파일 정보까지 포함한 완전한 메시지를 반환합니다.
     const fullMessage = await this.messageRepository.findOne({
       where: { id: savedMessage.id },
-      relations: ['sender', 'privateChat'], // sender와 privateChat 관계 포함
+      relations: ['sender', 'privateChat', 'replyTarget'], // sender와 privateChat 관계 포함
     });
 
     // 파일 정보 추가
@@ -341,8 +346,6 @@ export class ChatsService {
 
       if (!targetUserId) return;
 
-      console.log('!! TRAGET: ', targetUserId);
-
       const tokens = await this.fcmTokenRepository.find({
         where: { user: { id: targetUserId } },
       });
@@ -350,8 +353,6 @@ export class ChatsService {
       if (tokens.length === 0) return;
 
       const registrationTokens = tokens.map((t) => t.token);
-
-      console.log('!! TOKEN: ', registrationTokens);
 
       const message: admin.messaging.MulticastMessage = {
         tokens: registrationTokens,

@@ -63,7 +63,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       } catch (verifyError) {
         // 토큰이 만료되었거나 유효하지 않은 경우
         console.log(`토큰 검증 실패, 재발급 시도: ${verifyError.message}`);
-        
+
         // 토큰에서 userId 추출 시도 (만료된 토큰도 decode 가능)
         const decoded = this.jwtService.decode(token) as any;
         if (!decoded || !decoded.id) {
@@ -71,7 +71,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
 
         // Redis에서 Refresh Token 확인
-        const refreshToken = await this.redisService.getRefreshToken(decoded.id);
+        const refreshToken = await this.redisService.getRefreshToken(
+          decoded.id,
+        );
         if (!refreshToken) {
           throw new UnauthorizedException('Refresh Token이 없습니다.');
         }
@@ -89,7 +91,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
         // 클라이언트에 새로운 토큰 전달
         client.emit('token-refreshed', { token: accessToken });
-        console.log(`새로운 Access Token 발급 및 소켓 연결 허용: ${payload.username}`);
+        console.log(
+          `새로운 Access Token 발급 및 소켓 연결 허용: ${payload.username}`,
+        );
       }
 
       // Redis에서 강제 로그아웃 확인
@@ -240,6 +244,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       chatId: string;
       content: string;
       chatType: string;
+      replyTargetId?: string;
       fileIds?: string[];
       fileAttachments?: any[];
     },
@@ -273,6 +278,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           data.chatId,
           data.content,
           user.id,
+          data.replyTargetId ?? null,
           fileIds,
         );
       } else {

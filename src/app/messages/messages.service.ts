@@ -127,6 +127,8 @@ export class MessagesService {
       .leftJoinAndSelect('message.sender', 'sender')
       .leftJoinAndSelect('message.chat', 'chat')
       .leftJoinAndSelect('message.privateChat', 'privateChat')
+      .leftJoinAndSelect('message.replyTarget', 'replyTarget')
+      .leftJoinAndSelect('replyTarget.sender', 'replyTargetSender')
       .orderBy('message.createdAt', 'DESC') // 최신순
       .take(limit);
 
