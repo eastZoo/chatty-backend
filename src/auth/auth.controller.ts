@@ -28,8 +28,8 @@ export class AuthController {
   })
   @Post('/sign-in')
   async userSiginIn(@Body() loginDto: LoginDto, @Res() res: Response) {
-    const { username, password, fcmToken } = loginDto;
-    return this.authService.userSiginIn(username, password, fcmToken, res);
+    const { username, password } = loginDto;
+    return this.authService.userSiginIn(username, password, res);
   }
 
   @ApiOperation({ summary: '회원가입' })

@@ -11,7 +11,6 @@ import * as bcrypt from 'bcryptjs';
 import { Message } from './message.entity';
 import { Friendship } from './friend.entity';
 import { ChatReadStatus } from './chat-read-status.entity';
-import { FcmToken } from './fcm-token.entity';
 
 @Entity()
 export class Users {
@@ -38,10 +37,6 @@ export class Users {
   // 새롭게 추가: 사용자가 보낸 메시지들
   @OneToMany(() => Message, (message) => message.sender)
   messages: Message[];
-
-  // 추가: fcm 토큰 연결
-  @OneToMany(() => FcmToken, (token) => token.user)
-  fcmTokens: FcmToken[];
 
   @OneToMany(() => Friendship, (friendship) => friendship.requester)
   sentFriendRequests: Friendship[];

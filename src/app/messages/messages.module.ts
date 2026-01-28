@@ -12,8 +12,6 @@ import { ChatReadStatus } from 'src/entities/chat-read-status.entity';
 import { FilesModule } from '../files/files.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
-import { FcmToken } from 'src/entities/fcm-token.entity';
-import { FirebaseModule } from 'src/firebase/firebase.module';
 
 @Module({
   imports: [
@@ -23,9 +21,7 @@ import { FirebaseModule } from 'src/firebase/firebase.module';
       PrivateChat,
       Users,
       ChatReadStatus,
-      FcmToken,
     ]),
-    FirebaseModule,
     forwardRef(() => FilesModule),
     forwardRef(() => AuthModule),
     ConfigModule,

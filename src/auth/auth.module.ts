@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
@@ -11,11 +12,10 @@ import { RedisService } from './redis.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AccessTokenGuard } from './guards/access-token.guard';
 import { AdminGuard } from './guards/admin.guard';
-import { FcmToken } from 'src/entities/fcm-token.entity';
 
 @Module({
   controllers: [AuthController],
-  imports: [TypeOrmModule.forFeature([Users, FcmToken])],
+  imports: [TypeOrmModule.forFeature([Users])],
   providers: [
     LocalStrategy,
     JwtService,
