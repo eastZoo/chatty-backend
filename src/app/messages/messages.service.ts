@@ -223,6 +223,8 @@ export class MessagesService {
       .createQueryBuilder('message')
       .leftJoinAndSelect('message.sender', 'sender')
       .leftJoinAndSelect('message.chat', 'chat')
+      .leftJoinAndSelect('message.replyTarget', 'replyTarget')
+      .leftJoinAndSelect('replyTarget.sender', 'replyTargetSender')
       .leftJoinAndSelect('message.privateChat', 'privateChat');
 
     if (chatType === 'group') {
