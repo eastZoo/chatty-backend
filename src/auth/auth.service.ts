@@ -79,13 +79,32 @@ export class AuthService {
     delete user.password;
     const result = { accessToken, refreshToken, user };
 
-    await this.fcmTokenRepository.upsert(
-      {
+    // 사용자가 fcm Token을 기존에 발급 받았는데, 로그인을 한 경우인지 확인
+    const userExist = await this.fcmTokenRepository.findOne({
+      where: {
+        user: {
+          id: user.id,
+        },
+      },
+    });
+
+    // 기존에 사용자가 fcm Token을 발급받았으면 토큰만 업데이트
+    if (userExist) {
+      await this.fcmTokenRepository.update(
+        {
+          user: { id: user.id },
+        },
+        {
+          token: fcmToken,
+        },
+      );
+    } else {
+      // 아닌 경우 새로운 값으로 추가
+      await this.fcmTokenRepository.insert({
         token: fcmToken,
         user: { id: user.id },
-      },
-      ['token'],
-    );
+      });
+    }
 
     return res
 
