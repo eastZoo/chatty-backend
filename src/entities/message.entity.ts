@@ -6,10 +6,12 @@ import {
   ManyToOne,
   CreateDateColumn,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { Chat } from './chat.entity';
 import { Users } from './users.entity';
 import { PrivateChat } from './private-chat.entity';
+import { MessageReadStatus } from './message-read-status.entity';
 
 // 코드 첨부 기능 제거됨
 
@@ -45,6 +47,9 @@ export class Message {
   @ManyToOne(() => Message, { nullable: true })
   @JoinColumn({ name: 'reply_target_id' })
   replyTarget?: Message;
+
+  @OneToMany(() => MessageReadStatus, (mrs) => mrs.message)
+  readStatuses: MessageReadStatus[];
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;

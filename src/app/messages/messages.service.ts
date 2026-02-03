@@ -14,12 +14,16 @@ import { ChatsService } from '../chats/chats.service';
 import { Users } from '../../entities/users.entity';
 import { ChatGateway } from '../../chat.gateway';
 import { FilesService } from '../files/files.service';
+import { responseObj } from 'src/util/responseObj';
+import { MessageReadStatus } from 'src/entities/message-read-status.entity';
 
 @Injectable()
 export class MessagesService {
   constructor(
     @InjectRepository(Message)
     private messagesRepository: Repository<Message>,
+    @InjectRepository(MessageReadStatus)
+    private messageReadStatusRepository: Repository<MessageReadStatus>,
     @Inject(forwardRef(() => ChatsService))
     private chatsService: ChatsService,
     @Inject(forwardRef(() => ChatGateway))
@@ -129,6 +133,8 @@ export class MessagesService {
       .leftJoinAndSelect('message.privateChat', 'privateChat')
       .leftJoinAndSelect('message.replyTarget', 'replyTarget')
       .leftJoinAndSelect('replyTarget.sender', 'replyTargetSender')
+      .leftJoinAndSelect('message.readStatuses', 'readStatus')
+      .leftJoinAndSelect('readStatus.user', 'readUser')
       .orderBy('message.createdAt', 'DESC') // 최신순
       .take(limit);
 
@@ -175,7 +181,10 @@ export class MessagesService {
         } else {
           message.files = [];
         }
-        return message;
+        return {
+          ...message,
+          readByUserIds: message.readStatuses?.map((rs) => rs.user.id) ?? [],
+        };
       }),
     );
 
@@ -225,6 +234,8 @@ export class MessagesService {
       .leftJoinAndSelect('message.chat', 'chat')
       .leftJoinAndSelect('message.replyTarget', 'replyTarget')
       .leftJoinAndSelect('replyTarget.sender', 'replyTargetSender')
+      .leftJoinAndSelect('message.readStatuses', 'readStatus')
+      .leftJoinAndSelect('readStatus.user', 'readUser')
       .leftJoinAndSelect('message.privateChat', 'privateChat');
 
     if (chatType === 'group') {
@@ -276,7 +287,10 @@ export class MessagesService {
         } else {
           message.files = [];
         }
-        return message;
+        return {
+          ...message,
+          readByUserIds: message.readStatuses?.map((rs) => rs.user.id) ?? [],
+        };
       }),
     );
 
@@ -389,5 +403,40 @@ export class MessagesService {
       .delete()
       .execute();
     return result.affected ?? 0;
+  }
+
+  async markMsgAsRead(
+    userId: string,
+    chatId: string,
+    chatType: 'group' | 'private',
+  ): Promise<void> {
+    const unread = await this.messagesRepository
+      .createQueryBuilder('m')
+      .leftJoin(
+        MessageReadStatus,
+        'mrs',
+        'mrs.message_id = m.id AND mrs.user_id = :userId',
+        { userId },
+      )
+      .where('m.sender_id != :userId', { userId })
+      .andWhere(
+        chatType === 'group'
+          ? 'm.chat_id = :chatId'
+          : 'm.private_chat_id = :chatId',
+        { chatId },
+      )
+      .andWhere('mrs.id IS NULL')
+      .select('m.id')
+      .getMany();
+
+    if (!unread.length) return;
+
+    for (const m of unread) {
+      await this.messageReadStatusRepository.save({
+        message: { id: m.id },
+        user: { id: userId },
+        readAt: new Date(),
+      });
+    }
   }
 }

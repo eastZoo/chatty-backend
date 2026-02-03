@@ -342,7 +342,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         );
       }
 
-      // 읽음 상태 업데이트
+      // 채팅 읽음 상태 업데이트
+      await this.messagesService.markMsgAsRead(
+        user.id,
+        data.chatId,
+        data.chatType,
+      );
       await this.chatsService.markChatAsRead(
         { id: user.id } as any,
         { id: data.chatId, chatType: data.chatType } as any,
@@ -353,6 +358,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         type: 'read',
         chatId: data.chatId,
         chatType: data.chatType,
+        userId: user.id,
+      });
+
+      this.server.to(data.chatId).emit('messagesRead', {
+        chatId: data.chatId,
         userId: user.id,
       });
 
