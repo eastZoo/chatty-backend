@@ -7,7 +7,7 @@ export class FcmToken {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'text', unique: true })
+  @Column({ type: 'text' })
   token: string;
 
   @ManyToOne(() => Users, (user) => user.id, {
