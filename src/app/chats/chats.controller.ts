@@ -49,6 +49,7 @@ export class ChatsController {
       lastMessage: chat.lastMessage,
       unreadCount: chat.unreadCount,
       updatedAt: chat.updatedAt,
+      isFilesExist: chat.isFilesExist,
     }));
   }
 

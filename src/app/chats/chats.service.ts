@@ -163,12 +163,19 @@ export class ChatsService {
         const otherUser = chat.userA.id === user.id ? chat.userB : chat.userA;
         // 마지막 메시지 추출 (없으면 빈 문자열)
         let lastMessage = '';
+        let isFilesExist = false;
+
         if (chat.messages && chat.messages.length > 0) {
           chat.messages.sort(
             (a, b) =>
               new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
           );
+
           lastMessage = chat.messages[chat.messages.length - 1].content;
+          isFilesExist =
+            chat.messages[chat.messages.length - 1].fileIds.length != 0
+              ? true
+              : false;
         }
         // 읽지 않은 메시지 개수 계산:
         // ChatReadStatus에서 현재 사용자의 마지막 읽은 시각을 가져옵니다.
@@ -194,6 +201,7 @@ export class ChatsService {
           lastMessage,
           unreadCount,
           updatedAt: chat.updatedAt,
+          isFilesExist: isFilesExist,
         };
       }),
     );
