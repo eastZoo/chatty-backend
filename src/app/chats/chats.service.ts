@@ -116,14 +116,25 @@ export class ChatsService {
     // Fetch the existing chat if any
     const existingChat = await this.privateChatRepository
       .createQueryBuilder('privateChat')
+      .leftJoinAndSelect('privateChat.userA', 'userA')
+      .leftJoinAndSelect('privateChat.userB', 'userB')
       .where(
-        '(privateChat.userA = :userId AND privateChat.userB = :friendId) OR (privateChat.userA = :friendId AND privateChat.userB = :userId)',
+        '(userA.id = :userId AND userB.id = :friendId) OR (userA.id = :friendId AND userB.id = :userId)',
         { userId: user.id, friendId: createChatDto.friendId },
       )
       .getOne();
 
     if (existingChat) {
-      return { ...existingChat, type: 'private' } as PrivateChat;
+      const friend =
+        existingChat.userA.id === user.id
+          ? existingChat.userB
+          : existingChat.userA;
+
+      return {
+        ...existingChat,
+        type: 'private',
+        friendName: friend.username,
+      } as PrivateChat;
     } else {
       // If no existing chat, create a new one
       newChat = this.privateChatRepository.create({
