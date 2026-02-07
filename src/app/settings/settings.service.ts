@@ -62,7 +62,8 @@ export class SettingsService {
     const minutes = await this.getChatAutoDeleteMinutes();
     if (minutes <= 0) return;
     this.logger.log(`채팅 자동 삭제 실행: ${minutes}분 이전 메시지 삭제`);
-    const deleted = await this.messagesService.deleteAllMessages();
+    const deleted =
+      await this.messagesService.deleteMessagesOlderThanMinutes(minutes);
     if (deleted > 0) {
       this.logger.log(`채팅 자동 삭제 완료: ${deleted}건 삭제`);
     }

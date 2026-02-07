@@ -380,6 +380,25 @@ export class MessagesService {
   }
 
   /**
+   * 지정한 시간(분 단위)보다 오래된 모든 메시지 삭제 (그룹 채팅 + 1:1 채팅)
+   * 단, 상대가 읽지 않은 메세지는 삭제되지 않음
+   */
+  async deleteMessagesOlderThanMinutes(minutes: number): Promise<number> {
+    if (minutes <= 0) return 0;
+
+    const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+
+    const result = await this.messagesRepository
+      .createQueryBuilder()
+      .delete()
+      .where('created_at < :cutoff', { cutoff: cutoff.toISOString() })
+      .andWhere('id IN (SELECT message_id FROM message_read_status)')
+      .execute();
+
+    return result.affected ?? 0;
+  }
+
+  /**
    * 모든 메시지 삭제 (오후 6시 일일 삭제 작업용)
    * 단, 상대가 읽지 않은 메세지는 삭제되지 않음
    */
