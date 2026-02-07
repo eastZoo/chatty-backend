@@ -24,8 +24,9 @@ export class SettingsController {
   @ApiOperation({ summary: '채팅 자동 삭제 주기 설정 (관리자 전용)' })
   @ApiResponse({ status: 200, description: '설정 성공' })
   async setChatAutoDelete(@Body() dto: UpdateChatAutoDeleteDto) {
-    const minutes =
-      await this.settingsService.setChatAutoDeleteMinutes(dto.minutes);
+    const minutes = await this.settingsService.setChatAutoDeleteMinutes(
+      dto.minutes,
+    );
     return responseObj.success({ minutes });
   }
 }
