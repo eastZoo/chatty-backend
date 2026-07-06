@@ -18,6 +18,7 @@ import { responseObj } from 'src/util/responseObj';
 import { RegisterDto } from './dto/register.dto';
 import { RedisService } from './redis.service';
 import {
+  AdminRefreshTokenExpiresIn,
   AdminRefreshTokenMaxAge,
   RedisRefreshTokenTTL,
 } from 'src/util/getTokenMaxAge';
@@ -69,12 +70,12 @@ export class AuthService {
     // Refresh Token 생성 (7일)
     const refreshToken = this.createUserRefreshToken(payload);
 
-    // Redis에 Refresh Token 저장 (30분 TTL)
+    // Redis에 Refresh Token 저장 (7일 TTL)
     await this.redisService.setRefreshToken(
       user.id,
       refreshToken,
       RedisRefreshTokenTTL,
-    ); // 30분
+    );
 
     delete user.password;
     const result = { accessToken, refreshToken, user };
@@ -243,8 +244,8 @@ export class AuthService {
         throw new UnauthorizedException('유효하지 않은 Refresh Token입니다.');
       }
 
-      // Redis TTL 갱신 (30분 연장)
-      await this.redisService.refreshTokenTTL(payload.id, 30 * 60); // 30분
+      // Redis TTL 갱신 (7일 연장)
+      await this.redisService.refreshTokenTTL(payload.id, RedisRefreshTokenTTL);
 
       // DB에서 최신 type 조회
       const user = await this.usersRepository.findOne({
@@ -313,13 +314,12 @@ export class AuthService {
   //  Refresh Token 생성 (7일)
   createUserRefreshToken = (payload: any) => {
     Logger.log('createUserRefreshToken -> payload', payload);
-    const REFRESH_TOKEN_EXPIRES = AdminRefreshTokenMaxAge; // 7일
     const jwtRefreshSecretKey = this.configService.get(
       'ADMIN_JWT_REFRESH_SECRET',
     );
 
     return jwt.sign(payload, jwtRefreshSecretKey, {
-      expiresIn: REFRESH_TOKEN_EXPIRES,
+      expiresIn: AdminRefreshTokenExpiresIn,
     });
   };
 

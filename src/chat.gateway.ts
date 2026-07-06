@@ -102,7 +102,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         throw new UnauthorizedException('강제 로그아웃된 사용자입니다.');
       }
 
-      // Redis TTL 갱신 (30분 연장)
+      // Redis TTL 갱신 (7일 연장)
       await this.redisService.refreshTokenTTL(payload.id);
 
       // 사용자 정보를 소켓에 저장

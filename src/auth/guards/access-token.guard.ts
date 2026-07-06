@@ -59,7 +59,7 @@ export class AccessTokenGuard implements CanActivate {
         throw new UnauthorizedException('강제 로그아웃된 사용자입니다.');
       }
 
-      // Redis TTL 갱신 (30분 연장)
+      // Redis TTL 갱신 (7일 연장)
       await this.redisService.refreshTokenTTL(payload.id);
       this.logger.log(
         `🔄 AccessTokenGuard: Redis TTL 갱신 완료 - 사용자: ${payload.username}`,
@@ -105,7 +105,7 @@ export class AccessTokenGuard implements CanActivate {
           `📤 AccessTokenGuard: x-access-token 헤더 설정 완료 - 토큰 길이: ${newAccessToken.length}`,
         );
 
-        // Redis TTL 갱신 (30분 연장)
+        // Redis TTL 갱신 (7일 연장)
         await this.redisService.refreshTokenTTL(
           this.extractUserIdFromRefreshToken(refreshToken),
         );

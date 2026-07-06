@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { AuthService } from '../auth.service';
+import { RedisService } from '../redis.service';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -18,6 +19,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
+    private readonly redisService: RedisService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -31,14 +33,18 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const token = authHeader.substring(7); // 'Bearer ' 제거
-    console.log('@@token', token);
     try {
       // 토큰 검증
       const payload = this.jwtService.verify(token, {
         secret: this.configService.get<string>('ADMIN_JWT_SECRET'),
       });
 
-      console.log('payload', payload);
+      const refreshToken = await this.redisService.getRefreshToken(payload.id);
+      if (!refreshToken) {
+        throw new UnauthorizedException('강제 로그아웃된 사용자입니다.');
+      }
+
+      await this.redisService.refreshTokenTTL(payload.id);
 
       // 토큰이 유효하면 사용자 정보를 request에 추가
       request.user = payload;

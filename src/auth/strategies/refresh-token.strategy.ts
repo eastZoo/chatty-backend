@@ -12,7 +12,7 @@ export class RefreshTokenStrategy extends PassportStrategy(
     super({
       jwtFromRequest: (req) => {
         if (req && req.cookies) {
-          return req.cookies['refreshToken'];
+          return req.cookies['chatty_refreshToken'];
         }
         return null;
       },

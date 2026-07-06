@@ -16,6 +16,7 @@ import { Request, Response } from 'express';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AdminGuard } from './guards/admin.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -81,6 +82,7 @@ export class AuthController {
     status: 200,
     description: '강제 로그아웃 성공',
   })
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Delete('/force-logout/:userId')
   async forceLogout(@Param('userId') userId: string) {
     await this.authService.logout(userId);
@@ -95,6 +97,7 @@ export class AuthController {
     status: 200,
     description: '모든 사용자 강제 로그아웃 성공',
   })
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Delete('/force-logout-all')
   async forceLogoutAll() {
     const result = await this.authService.logoutAll();
@@ -110,6 +113,7 @@ export class AuthController {
     status: 200,
     description: 'Redis 토큰 정보',
   })
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Get('/redis-info')
   async getRedisInfo() {
     const info = await this.authService.getRedisInfo();

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { RedisRefreshTokenTTL } from 'src/util/getTokenMaxAge';
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
@@ -67,12 +68,12 @@ export class RedisService implements OnModuleDestroy {
    * Refresh Token을 Redis에 저장
    * @param userId 사용자 ID
    * @param refreshToken Refresh Token
-   * @param ttl TTL (초) - 기본값: 30분 (1800초)
+   * @param ttl TTL (초) - 기본값: 7일
    */
   async setRefreshToken(
     userId: string,
     refreshToken: string,
-    ttl: number = 30 * 60, // 30분
+    ttl: number = RedisRefreshTokenTTL,
   ): Promise<void> {
     const key = `refresh_token:${userId}`;
     await this.redis.setex(key, ttl, refreshToken);
@@ -104,11 +105,14 @@ export class RedisService implements OnModuleDestroy {
   }
 
   /**
-   * Refresh Token의 TTL을 갱신 (30분 연장)
+   * Refresh Token의 TTL을 갱신 (7일 연장)
    * @param userId 사용자 ID
-   * @param ttl TTL (초) - 기본값: 30분 (1800초)
+   * @param ttl TTL (초) - 기본값: 7일
    */
-  async refreshTokenTTL(userId: string, ttl: number = 30 * 60): Promise<void> {
+  async refreshTokenTTL(
+    userId: string,
+    ttl: number = RedisRefreshTokenTTL,
+  ): Promise<void> {
     const key = `refresh_token:${userId}`;
     const exists = await this.redis.exists(key);
 
