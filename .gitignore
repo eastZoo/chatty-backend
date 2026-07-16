@@ -40,3 +40,6 @@ lerna-debug.log*
 
 /uploads
 /src/config/*
+
+# 채팅 자동 삭제 백업 파일
+/backups

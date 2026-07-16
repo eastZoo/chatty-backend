@@ -15,6 +15,7 @@ import { Users } from '../../entities/users.entity';
 import { ChatGateway } from '../../chat.gateway';
 import { FilesService } from '../files/files.service';
 import { MessageReadStatus } from 'src/entities/message-read-status.entity';
+import { MessageBackupService } from './message-backup.service';
 
 @Injectable()
 export class MessagesService {
@@ -29,6 +30,7 @@ export class MessagesService {
     private chatGateway: ChatGateway, // 주입
     @Inject(forwardRef(() => FilesService))
     private filesService: FilesService,
+    private readonly messageBackupService: MessageBackupService,
   ) {}
 
   async findAllByChat(
@@ -388,11 +390,27 @@ export class MessagesService {
 
     const cutoff = new Date(Date.now() - minutes * 60 * 1000);
 
+    // 삭제 대상 ID 를 먼저 조회 (읽힌 메시지만, 삭제 조건과 동일)
+    const rows = await this.messagesRepository
+      .createQueryBuilder('m')
+      .select('m.id', 'id')
+      .where('m.created_at < :cutoff', { cutoff: cutoff.toISOString() })
+      .andWhere('m.id IN (SELECT message_id FROM message_read_status)')
+      .getRawMany<{ id: string }>();
+
+    const ids = rows.map((r) => r.id);
+    if (ids.length === 0) return 0;
+
+    // 실제 삭제 전에 복원용 INSERT 파일로 백업
+    await this.messageBackupService.backupMessagesByIds(
+      ids,
+      `auto-delete-${minutes}min`,
+    );
+
     const result = await this.messagesRepository
       .createQueryBuilder()
       .delete()
-      .where('created_at < :cutoff', { cutoff: cutoff.toISOString() })
-      .andWhere('id IN (SELECT message_id FROM message_read_status)')
+      .whereInIds(ids)
       .execute();
 
     return result.affected ?? 0;
@@ -403,10 +421,23 @@ export class MessagesService {
    * 단, 상대가 읽지 않은 메세지는 삭제되지 않음
    */
   async deleteAllMessages(): Promise<number> {
+    // 삭제 대상 ID 를 먼저 조회 (읽힌 메시지만, 삭제 조건과 동일)
+    const rows = await this.messagesRepository
+      .createQueryBuilder('m')
+      .select('m.id', 'id')
+      .where('m.id IN (SELECT message_id FROM message_read_status)')
+      .getRawMany<{ id: string }>();
+
+    const ids = rows.map((r) => r.id);
+    if (ids.length === 0) return 0;
+
+    // 실제 삭제 전에 복원용 INSERT 파일로 백업
+    await this.messageBackupService.backupMessagesByIds(ids, 'daily-delete-all');
+
     const result = await this.messagesRepository
       .createQueryBuilder()
       .delete()
-      .andWhere('id IN (SELECT message_id FROM message_read_status)')
+      .whereInIds(ids)
       .execute();
     return result.affected ?? 0;
   }

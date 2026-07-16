@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MessagesController } from './messages.controller';
 import { MessagesService } from './messages.service';
+import { MessageBackupService } from './message-backup.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Message } from 'src/entities/message.entity';
 import { Chat } from 'src/entities/chat.entity';
@@ -33,7 +34,7 @@ import { MessageReadStatus } from 'src/entities/message-read-status.entity';
     ConfigModule,
   ],
   controllers: [MessagesController],
-  providers: [MessagesService, ChatsService, ChatGateway],
+  providers: [MessagesService, ChatsService, ChatGateway, MessageBackupService],
   exports: [MessagesService],
 })
 export class MessagesModule {}
