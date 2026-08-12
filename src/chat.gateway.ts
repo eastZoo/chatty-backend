@@ -15,6 +15,8 @@ import {
   Inject,
   Logger,
   UnauthorizedException,
+  createParamDecorator,
+  ExecutionContext,
 } from '@nestjs/common';
 import { MessagesService } from './app/messages/messages.service';
 import { ChatsService } from './app/chats/chats.service'; // PrivateChat 관련 메서드가 있는 서비스
@@ -22,6 +24,13 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from './auth/redis.service';
 import { AuthService } from './auth/auth.service';
+
+// NestJS 10 does not export @Ack(). Socket.IO passes the acknowledgement as
+// the third gateway argument, so expose it through a compatible WS parameter
+// decorator instead of relying solely on implicit return-value ACK handling.
+const SocketAck = createParamDecorator(
+  (_data: unknown, context: ExecutionContext) => context.getArgByIndex(2),
+);
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -260,7 +269,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       clientMessageId?: string;
     },
     @ConnectedSocket() client: Socket,
-  ) {
+    @SocketAck()
+    ack?: (response: {
+      ok: boolean;
+      message?: Record<string, unknown>;
+      error?: string;
+    }) => void,
+  ): Promise<void> {
     try {
       // 소켓에 저장된 사용자 정보 확인
       const user = client.data.user;
@@ -371,13 +386,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             });
         }
       }
-      return { ok: true, message: messageForBroadcast };
+      ack?.({ ok: true, message: messageForBroadcast });
     } catch (error) {
       console.error('Error in handleSendMessage:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to send message';
       client.emit('errorMessage', { error: errorMessage });
-      return { ok: false, error: errorMessage };
+      ack?.({ ok: false, error: errorMessage });
     }
   }
 
