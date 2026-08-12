@@ -1,9 +1,9 @@
 // src/chats/chats.service.ts
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -100,6 +100,35 @@ export class ChatsService {
     return chat;
   }
 
+  async canUserAccessChat(
+    chatId: string,
+    chatType: 'group' | 'private',
+    userId: string,
+  ): Promise<boolean> {
+    if (chatType === 'private') {
+      return this.privateChatRepository
+        .createQueryBuilder('privateChat')
+        .leftJoin('privateChat.userA', 'userA')
+        .leftJoin('privateChat.userB', 'userB')
+        .where('privateChat.id = :chatId', { chatId })
+        .andWhere('(userA.id = :userId OR userB.id = :userId)', { userId })
+        .getExists();
+    }
+
+    return this.chatsRepository
+      .createQueryBuilder('chat')
+      .leftJoin('chat.user', 'owner')
+      .leftJoin('chat.participants', 'participant')
+      .where('chat.id = :chatId', { chatId })
+      .andWhere('(owner.id = :userId OR participant.id = :userId)', { userId })
+      .getExists();
+  }
+
+  async canUserAccessAnyChat(chatId: string, userId: string): Promise<boolean> {
+    if (await this.canUserAccessChat(chatId, 'private', userId)) return true;
+    return this.canUserAccessChat(chatId, 'group', userId);
+  }
+
   /**
    * 1:1 채팅방 생성 또는 조회
    *  */
@@ -156,67 +185,84 @@ export class ChatsService {
    * 1:1 채팅방 목록 조회
    *  */
   async getPrivateChats(user: TokenUserInfo): Promise<any[]> {
-    console.log('user.id', user.id);
     const chats = await this.privateChatRepository
       .createQueryBuilder('privateChat')
       .leftJoinAndSelect('privateChat.userA', 'userA')
       .leftJoinAndSelect('privateChat.userB', 'userB')
-      .leftJoinAndSelect('privateChat.messages', 'message')
       .where('privateChat.userA = :userId OR privateChat.userB = :userId', {
         userId: user.id,
       })
       .orderBy('privateChat.updatedAt', 'DESC')
       .getMany();
 
-    const chatsWithUnread = await Promise.all(
-      chats.map(async (chat) => {
-        // 상대방 정보 추출
-        const otherUser = chat.userA.id === user.id ? chat.userB : chat.userA;
-        // 마지막 메시지 추출 (없으면 빈 문자열)
-        let lastMessage = '';
-        let isFilesExist = false;
+    if (chats.length === 0) return [];
 
-        if (chat.messages && chat.messages.length > 0) {
-          chat.messages.sort(
-            (a, b) =>
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-          );
+    const chatIds = chats.map((chat) => chat.id);
+    const latestMessageId = this.messageRepository
+      .createQueryBuilder('latestMessage')
+      .select('latestMessage.id')
+      .where('latestMessage.private_chat_id = message.private_chat_id')
+      .orderBy('latestMessage.created_at', 'DESC')
+      .addOrderBy('latestMessage.id', 'DESC')
+      .limit(1)
+      .getQuery();
+    const lastReadAt = this.chatReadStatusRepository
+      .createQueryBuilder('latestReadStatus')
+      .select('MAX(latestReadStatus.lastReadAt)')
+      .where('latestReadStatus.chatId = message.private_chat_id')
+      .andWhere('latestReadStatus.chatType = :chatType')
+      .andWhere('latestReadStatus.user = :userId')
+      .getQuery();
 
-          lastMessage = chat.messages[chat.messages.length - 1].content;
-          isFilesExist =
-            chat.messages[chat.messages.length - 1].fileIds.length != 0
-              ? true
-              : false;
-        }
-        // 읽지 않은 메시지 개수 계산:
-        // ChatReadStatus에서 현재 사용자의 마지막 읽은 시각을 가져옵니다.
-        const chatType: 'group' | 'private' = (chat as any).type || 'private';
-        const readStatus = await this.chatReadStatusRepository.findOne({
-          where: { chatId: chat.id, chatType: chatType, user: { id: user.id } },
-        });
-        console.log('readStatus', readStatus);
-        const lastReadAt = readStatus ? readStatus.lastReadAt : new Date(0);
-        // 해당 채팅방(privateChat)에 대해, 현재 사용자가 보낸 메시지가 아닌, lastReadAt 이후의 메시지 수를 구합니다.
+    // Only retrieve one latest-message row per chat. Previously this endpoint
+    // joined and sorted every historical message on every list refresh.
+    const [latestMessages, unreadRows] = await Promise.all([
+      this.messageRepository
+        .createQueryBuilder('message')
+        .select('message.private_chat_id', 'chatId')
+        .addSelect('message.content', 'content')
+        .addSelect('message.file_ids', 'fileIds')
+        .where('message.private_chat_id IN (:...chatIds)', { chatIds })
+        .andWhere(`message.id = (${latestMessageId})`)
+        .getRawMany<{ chatId: string; content: string; fileIds: unknown }>(),
+      this.messageRepository
+        .createQueryBuilder('message')
+        .select('message.private_chat_id', 'chatId')
+        .addSelect('COUNT(message.id)', 'unreadCount')
+        .where('message.private_chat_id IN (:...chatIds)', { chatIds })
+        .andWhere('message.sender_id != :userId', { userId: user.id })
+        .andWhere(`message.created_at > COALESCE((${lastReadAt}), :epoch)`, {
+          chatType: 'private',
+          userId: user.id,
+          epoch: new Date(0),
+        })
+        .groupBy('message.private_chat_id')
+        .getRawMany<{ chatId: string; unreadCount: string }>(),
+    ]);
 
-        const unreadCount = await this.messageRepository
-          .createQueryBuilder('message')
-          .where('message.private_chat_id = :chatId', { chatId: chat.id })
-          .andWhere('message.sender_id != :userId', { userId: user.id })
-          .andWhere('message.created_at > :lastReadAt', { lastReadAt })
-          .getCount();
-
-        console.log('unreadCount', unreadCount);
-        return {
-          id: chat.id,
-          otherUser,
-          lastMessage,
-          unreadCount,
-          updatedAt: chat.updatedAt,
-          isFilesExist: isFilesExist,
-        };
-      }),
+    const latestMessageByChat = new Map(
+      latestMessages.map((message) => [message.chatId, message]),
     );
-    return chatsWithUnread;
+    const unreadCountByChat = new Map(
+      unreadRows.map((row) => [row.chatId, Number(row.unreadCount)]),
+    );
+
+    return chats.map((chat) => {
+      const latestMessage = latestMessageByChat.get(chat.id);
+      const fileIds = latestMessage?.fileIds;
+      const isFilesExist = Array.isArray(fileIds)
+        ? fileIds.length > 0
+        : typeof fileIds === 'string' && fileIds.length > 0;
+
+      return {
+        id: chat.id,
+        otherUser: chat.userA.id === user.id ? chat.userB : chat.userA,
+        lastMessage: latestMessage?.content ?? '',
+        unreadCount: unreadCountByChat.get(chat.id) ?? 0,
+        updatedAt: chat.updatedAt,
+        isFilesExist,
+      };
+    });
   }
 
   /**
@@ -230,19 +276,21 @@ export class ChatsService {
     fileIds?: string[],
   ): Promise<Message> {
     // PrivateChat 객체 조회
-    const privateChat = await this.privateChatRepository.findOne({
-      where: { id: roomId },
-      relations: ['messages'],
-    });
+    const [privateChat, sender] = await Promise.all([
+      this.privateChatRepository.findOne({ where: { id: roomId } }),
+      this.usersRepository.findOne({ where: { id: senderId } }),
+    ]);
     if (!privateChat) {
       throw new BadRequestException('Private chat not found');
     }
-    // sender 정보 조회 (생략 가능: 클라이언트에서 sender 정보를 같이 보낼 수도 있음)
-    const sender = await this.usersRepository.findOne({
-      where: { id: senderId },
-    });
     if (!sender) {
       throw new BadRequestException('Sender not found');
+    }
+    if (
+      privateChat.userA.id !== senderId &&
+      privateChat.userB.id !== senderId
+    ) {
+      throw new ForbiddenException('You are not a participant in this chat');
     }
 
     const message = this.messageRepository.create({
@@ -258,21 +306,20 @@ export class ChatsService {
     // 메시지 저장
     const savedMessage = await this.messageRepository.save(message);
 
-    // PrivateChat의 updated_at 업데이트
-    await this.privateChatRepository.update(
-      {
-        id: roomId,
-      },
-      {
-        updatedAt: new Date(),
-      },
-    );
-
-    // 저장된 메시지를 다시 조회해 sender 정보와 파일 정보까지 포함한 완전한 메시지를 반환합니다.
-    const fullMessage = await this.messageRepository.findOne({
-      where: { id: savedMessage.id },
-      relations: ['sender', 'privateChat', 'replyTarget'], // sender와 privateChat 관계 포함
-    });
+    // The saved entity already carries sender/privateChat. Only replies need a
+    // follow-up relation query; ordinary sends avoid another DB round trip.
+    const [, fullMessage] = await Promise.all([
+      this.privateChatRepository.update(
+        { id: roomId },
+        { updatedAt: new Date() },
+      ),
+      replyTargetId
+        ? this.messageRepository.findOne({
+            where: { id: savedMessage.id },
+            relations: ['sender', 'privateChat', 'replyTarget'],
+          })
+        : Promise.resolve(savedMessage),
+    ]);
 
     // 파일 정보 추가
     if (fullMessage.fileIds && fullMessage.fileIds.length > 0) {
@@ -308,40 +355,20 @@ export class ChatsService {
 
   /** 주어진 채팅방에 대해 사용자의 마지막 읽은 시각을 업데이트합니다. */
   async markChatAsRead(user: TokenUserInfo, chat: ChatReadDto): Promise<void> {
-    // 그룹 채팅은 Chat 엔티티, 1:1 채팅은 PrivateChat 엔티티
-    // PrivateChat 엔티티에서는 getOrCreatePrivateChat 메서드에서 type을 'private'으로 추가했다고 가정합니다.
-    console.log('chat', chat);
-
     const chatType: 'group' | 'private' = chat.chatType || 'group';
     const chatId = chat.id;
-
-    console.log('chatType', chatType);
-    console.log('chatId', chatId);
-
-    // 채팅 읽음 상태 업데이트 ( chat과 chatType을 통해 채팅 읽음 상태 업데이트)
-    let readStatus = await this.chatReadStatusRepository.findOne({
-      where: { chatId: chatId, chatType: chatType, user: { id: user.id } },
-    });
-
-    Logger.log('readStatus', readStatus);
-    if (readStatus) {
-      Logger.log('readStatus 존재');
-      console.log('readStatus', readStatus);
-      // readStatus.lastReadAt = new Date();
-      // new Date()로 업데이트하면 디비 시간과 클라이언트 시간이 다르므로, 삭제합니다.
-      delete readStatus.lastReadAt;
-
-      // 이미 해당 채팅방에 대한 읽음 상태가 있으면, 그상태의 시간만 업데이트합니다.
-      await this.chatReadStatusRepository.update(readStatus.id, readStatus);
-    } else {
-      readStatus = this.chatReadStatusRepository.create({
-        chatId: chatId,
-        chatType: chatType,
-        user: user,
-        // lastReadAt: new Date(),
-      });
-      await this.chatReadStatusRepository.save(readStatus);
-    }
+    await this.chatReadStatusRepository
+      .createQueryBuilder()
+      .insert()
+      .into(ChatReadStatus)
+      .values({
+        chatId,
+        chatType,
+        user: { id: user.id },
+        lastReadAt: new Date(),
+      })
+      .orUpdate(['last_read_at'], ['chat_id', 'chat_type', 'user_id'])
+      .execute();
   }
 
   /**
@@ -371,16 +398,20 @@ export class ChatsService {
 
       if (tokens.length === 0) return;
 
-      const registrationTokens = tokens.map((t) => t.token);
+      const registrationTokens = [
+        ...new Set(tokens.map((t) => t.token).filter(Boolean)),
+      ];
+
+      if (registrationTokens.length === 0) return;
 
       const message: admin.messaging.MulticastMessage = {
         tokens: registrationTokens,
-        notification: {
-          title: 'Chatty',
-          body: '새로운 메세지가 있습니다.',
-        },
         data: {
           type: 'chat',
+          title: 'Chatty',
+          body: '새로운 메시지가 있습니다.',
+          chatId: data.chatId,
+          url: '/chat',
         },
       };
 

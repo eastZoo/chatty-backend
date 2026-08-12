@@ -107,6 +107,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // 사용자 정보를 소켓에 저장
       client.data.user = payload;
+      await client.join(`user:${payload.id}`);
       console.log(`Client connected: ${client.id}, User: ${payload.username}`);
     } catch (error) {
       console.error(`Connection failed: ${error.message}`);
@@ -120,13 +121,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('joinRoom')
-  handleJoinRoom(
+  async handleJoinRoom(
     @MessageBody() roomId: string,
     @ConnectedSocket() client: Socket,
   ) {
     try {
       if (!roomId) {
         throw new Error('Invalid room id');
+      }
+      const userId = client.data.user?.id;
+      if (
+        !userId ||
+        !(await this.chatsService.canUserAccessAnyChat(roomId, userId))
+      ) {
+        throw new UnauthorizedException('You cannot access this chat');
       }
 
       if (!client.rooms.has(roomId)) {
@@ -170,19 +178,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     },
     @ConnectedSocket() client: Socket,
   ) {
-    const { roomId, chatType, limit = 20, cursor, direction = 'latest' } = data;
-
-    console.log('getMessages 요청:', {
+    const {
       roomId,
       chatType,
-      limit,
+      limit: requestedLimit = 20,
       cursor,
-      direction,
-    });
+      direction = 'latest',
+    } = data;
+    const limit = Math.min(Math.max(Number(requestedLimit) || 20, 1), 100);
 
     try {
       if (!roomId || !chatType) {
         throw new Error('getMessages roomId and chatType are required');
+      }
+      const userId = client.data.user?.id;
+      if (
+        !userId ||
+        !(await this.chatsService.canUserAccessChat(roomId, chatType, userId))
+      ) {
+        throw new UnauthorizedException('You cannot access this chat');
       }
 
       let messages;
@@ -222,10 +236,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         hasMore,
         cursor: newCursor,
       });
-
-      console.log(
-        `getMessages Sent ${messages.length} messages (hasMore: ${hasMore}) for ${chatType} chat ${roomId} to socket ${client.id}`,
-      );
     } catch (error) {
       console.error('getMessages Error in handleGetMessages:', error);
       client.emit('errorMessage', {
@@ -247,10 +257,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       replyTargetId?: string;
       fileIds?: string[];
       fileAttachments?: any[];
+      clientMessageId?: string;
     },
     @ConnectedSocket() client: Socket,
   ) {
-    console.log('data@@', data);
     try {
       // 소켓에 저장된 사용자 정보 확인
       const user = client.data.user;
@@ -265,7 +275,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (!data.chatId) {
         throw new Error('Missing required fields: chatId is required');
       }
-
+      if (data.chatType !== 'private' && data.chatType !== 'group') {
+        throw new Error('Invalid chatType');
+      }
+      if (typeof data.content !== 'string' || data.content.length > 1000) {
+        throw new Error('Message content must be at most 1000 characters');
+      }
+      if (fileIds.length > 10) {
+        throw new Error('A message can contain at most 10 files');
+      }
+      if (data.clientMessageId && data.clientMessageId.length > 100) {
+        throw new Error('Invalid clientMessageId');
+      }
       // content가 없고 fileIds도 없으면 에러
       if (!data.content && !fileIds.length) {
         throw new Error('Either content or file attachments are required');
@@ -273,7 +294,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       let savedMessage;
       if (data.chatType === 'private') {
-        Logger.log('createMessage112');
         savedMessage = await this.chatsService.createPrivateMessage(
           data.chatId,
           data.content,
@@ -282,7 +302,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           fileIds,
         );
       } else {
-        Logger.log('createMessage11');
         savedMessage = await this.messagesService.create(
           data.chatId,
           {
@@ -292,34 +311,73 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           { id: user.id, username: user.username } as any,
         );
       }
-      this.server.to(data.chatId).emit('newMessage', savedMessage);
-      console.log(`Broadcasted saved message to room ${data.chatId}`);
+      const messageForBroadcast = {
+        ...savedMessage,
+        clientMessageId: data.clientMessageId,
+      };
+
+      this.server.to(data.chatId).emit('newMessage', messageForBroadcast);
 
       // 채팅방 목록 업데이트를 위한 이벤트 브로드캐스트
       if (data.chatType === 'private') {
         // 1:1 채팅의 경우 참여자들에게 채팅방 목록 업데이트 알림
-        const privateChat = await this.chatsService.findPrivateChatById(
-          data.chatId,
-        );
-        if (privateChat) {
+        const privateChat = savedMessage.privateChat;
+        const participantRooms = [
+          privateChat?.userA?.id,
+          privateChat?.userB?.id,
+        ]
+          .filter((userId): userId is string => Boolean(userId))
+          .map((userId) => `user:${userId}`);
+
+        if (participantRooms.length > 0) {
           // userA와 userB 모두에게 채팅방 목록 업데이트 알림
-          this.server.emit('chatListUpdate', {
+          this.server.to(participantRooms).emit('chatListUpdate', {
             type: 'private',
             chatId: data.chatId,
-            message: savedMessage,
+            message: messageForBroadcast,
           });
         }
+
+        void this.chatsService
+          .sendPushAlarms({
+            chatId: data.chatId,
+            content: data.content,
+            userId: user.id,
+          })
+          .catch((pushError) => {
+            Logger.error(
+              `Failed to send push notification for chat ${data.chatId}`,
+              pushError instanceof Error ? pushError.stack : String(pushError),
+              ChatGateway.name,
+            );
+          });
       } else {
         // 그룹 채팅의 경우 해당 채팅방 참여자들에게 알림
-        this.server.emit('chatListUpdate', {
-          type: 'group',
-          chatId: data.chatId,
-          message: savedMessage,
-        });
+        const groupChat = savedMessage.chat;
+        const participantRooms = [
+          groupChat?.user?.id,
+          ...(groupChat?.participants?.map((participant) => participant.id) ??
+            []),
+        ]
+          .filter((userId): userId is string => Boolean(userId))
+          .map((userId) => `user:${userId}`);
+        if (participantRooms.length > 0) {
+          this.server
+            .to([...new Set(participantRooms)])
+            .emit('chatListUpdate', {
+              type: 'group',
+              chatId: data.chatId,
+              message: messageForBroadcast,
+            });
+        }
       }
+      return { ok: true, message: messageForBroadcast };
     } catch (error) {
       console.error('Error in handleSendMessage:', error);
-      client.emit('errorMessage', { error: 'Failed to send message' });
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to send message';
+      client.emit('errorMessage', { error: errorMessage });
+      return { ok: false, error: errorMessage };
     }
   }
 
@@ -341,6 +399,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           'Missing required fields: chatId and chatType are required',
         );
       }
+      if (
+        !(await this.chatsService.canUserAccessChat(
+          data.chatId,
+          data.chatType,
+          user.id,
+        ))
+      ) {
+        throw new UnauthorizedException('You cannot access this chat');
+      }
 
       // 채팅 읽음 상태 업데이트
       await this.messagesService.markMsgAsRead(
@@ -354,7 +421,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       );
 
       // 채팅방 목록 업데이트를 위한 이벤트 브로드캐스트
-      this.server.emit('chatListUpdate', {
+      this.server.to(data.chatId).emit('chatListUpdate', {
         type: 'read',
         chatId: data.chatId,
         chatType: data.chatType,
@@ -365,8 +432,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         chatId: data.chatId,
         userId: user.id,
       });
-
-      console.log(`Marked chat ${data.chatId} as read for user ${user.id}`);
     } catch (error) {
       console.error('Error in handleMarkAsRead:', error);
       client.emit('errorMessage', { error: 'Failed to mark as read' });

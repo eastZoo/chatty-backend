@@ -4,12 +4,16 @@ import {
   ManyToOne,
   Column,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { Users } from './users.entity';
 
 export type ChatTypeForReadStatus = 'group' | 'private';
 
 @Entity()
+@Index('uq_chat_read_status_chat_type_user', ['chatId', 'chatType', 'user'], {
+  unique: true,
+})
 export class ChatReadStatus {
   @PrimaryGeneratedColumn('uuid')
   id: string;

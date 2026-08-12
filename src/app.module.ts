@@ -37,6 +37,8 @@ import { FirebaseModule } from './firebase/firebase.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
         const dbType = configService.get<string>('DB_TYPE');
+        const enableQueryLogging =
+          configService.get<string>('NODE_ENV') !== 'production';
 
         if (dbType === 'sqlite') {
           return {
@@ -45,7 +47,7 @@ import { FirebaseModule } from './firebase/firebase.module';
             entities: [__dirname + '/entities/*.entity{.ts,.js}'],
             synchronize: false,
             namingStrategy: new SnakeNamingStrategy(),
-            logging: true,
+            logging: enableQueryLogging,
           };
         } else {
           return {
@@ -58,7 +60,7 @@ import { FirebaseModule } from './firebase/firebase.module';
             entities: [__dirname + '/entities/*.entity{.ts,.js}'],
             synchronize: false,
             namingStrategy: new SnakeNamingStrategy(),
-            logging: true,
+            logging: enableQueryLogging,
           };
         }
       },

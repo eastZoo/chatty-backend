@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ForbiddenException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -137,6 +138,7 @@ export class MessagesService {
       .leftJoinAndSelect('message.readStatuses', 'readStatus')
       .leftJoinAndSelect('readStatus.user', 'readUser')
       .orderBy('message.createdAt', 'DESC') // 최신순
+      .addOrderBy('message.id', 'DESC')
       .take(limit);
 
     // 채팅 타입에 따라 조건 추가
@@ -246,10 +248,21 @@ export class MessagesService {
     }
 
     queryBuilder
-      .andWhere('message.createdAt < :cursorCreatedAt', {
-        cursorCreatedAt: cursorMessage.createdAt,
-      })
+      .andWhere(
+        `(
+          message.createdAt < :cursorCreatedAt
+          OR (
+            message.createdAt = :cursorCreatedAt
+            AND message.id < :cursorId
+          )
+        )`,
+        {
+          cursorCreatedAt: cursorMessage.createdAt,
+          cursorId: cursorMessage.id,
+        },
+      )
       .orderBy('message.createdAt', 'DESC')
+      .addOrderBy('message.id', 'DESC')
       .take(limit + 1); // limit보다 1개 더 가져와서 hasMore 판단
 
     const messages = await queryBuilder.getMany();
@@ -324,10 +337,12 @@ export class MessagesService {
     if (!chat) {
       throw new NotFoundException('Chat not found');
     }
-
-    Logger.log(createMessageDto);
-    Logger.log(user);
-    Logger.log(chat);
+    const isParticipant =
+      chat.user?.id === user.id ||
+      chat.participants?.some((participant) => participant.id === user.id);
+    if (!isParticipant) {
+      throw new ForbiddenException('You are not a participant in this chat');
+    }
 
     const message = this.messagesRepository.create({
       content: createMessageDto.content,
@@ -339,14 +354,10 @@ export class MessagesService {
     // 메시지를 저장합니다.
     const savedMessage = await this.messagesRepository.save(message);
 
-    // Chat의 updated_at 업데이트
+    // The entity was created with its sender/chat relations, so a second
+    // SELECT is unnecessary on the hot send path.
     await this.chatsService.updateChatUpdatedAt(chatId);
-
-    // 저장된 메시지를 다시 조회해 sender 정보까지 포함한 완전한 메시지를 반환합니다.
-    const fullMessage = await this.messagesRepository.findOne({
-      where: { id: savedMessage.id },
-      relations: ['sender', 'chat'], // sender의 전체 정보와 chat 관계를 가져옵니다.
-    });
+    const fullMessage = savedMessage;
 
     // 파일 정보 추가
     if (fullMessage.fileIds && fullMessage.fileIds.length > 0) {
@@ -432,7 +443,10 @@ export class MessagesService {
     if (ids.length === 0) return 0;
 
     // 실제 삭제 전에 복원용 INSERT 파일로 백업
-    await this.messageBackupService.backupMessagesByIds(ids, 'daily-delete-all');
+    await this.messageBackupService.backupMessagesByIds(
+      ids,
+      'daily-delete-all',
+    );
 
     const result = await this.messagesRepository
       .createQueryBuilder()
@@ -468,12 +482,21 @@ export class MessagesService {
 
     if (!unread.length) return;
 
-    for (const m of unread) {
-      await this.messageReadStatusRepository.save({
-        message: { id: m.id },
-        user: { id: userId },
-        readAt: new Date(),
-      });
-    }
+    const readAt = new Date();
+    await this.messageReadStatusRepository
+      .createQueryBuilder()
+      .insert()
+      .into(MessageReadStatus)
+      .values(
+        unread.map((message) => ({
+          message: { id: message.id },
+          user: { id: userId },
+          readAt,
+        })),
+      )
+      // Concurrent mark-as-read requests may select the same rows. The unique
+      // index keeps the operation idempotent without retrying row by row.
+      .orIgnore()
+      .execute();
   }
 }

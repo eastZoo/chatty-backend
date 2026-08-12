@@ -83,21 +83,4 @@ export class ChatsController {
     await this.chatsService.markChatAsRead(user, chat);
     return { success: true };
   }
-
-  // PUSH 알람 전송
-  @Post('/send/push')
-  @UseGuards(AccessTokenGuard)
-  async sendPushAlrams(
-    @Req() req: RequestWithUser,
-    @Body()
-    data: {
-      chatId: string;
-      content: string;
-    },
-  ) {
-    return await this.chatsService.sendPushAlarms({
-      ...data,
-      userId: req.user.id,
-    });
-  }
 }
