@@ -313,7 +313,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           data.chatId,
           data.content,
           user.id,
-          data.replyTargetId ?? null,
+          data.replyTargetId,
           fileIds,
         );
       } else {

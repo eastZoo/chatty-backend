@@ -297,9 +297,12 @@ export class ChatsService {
       content,
       sender,
       privateChat,
-      replyTarget: {
-        id: replyTargetId || null,
-      },
+      // Do not attach a placeholder relation to ordinary messages. TypeORM
+      // keeps that object on the entity returned by save(), so it used to be
+      // broadcast as `replyTarget: { id: null }` until the next page reload.
+      ...(replyTargetId
+        ? { replyTarget: { id: replyTargetId } as Message }
+        : {}),
       fileIds: fileIds || null,
     });
 
