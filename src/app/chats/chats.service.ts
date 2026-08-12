@@ -381,6 +381,7 @@ export class ChatsService {
     chatId: string;
     content: string;
     userId: string; // 메시지 보낸 사람
+    messageId: string;
   }) {
     try {
       // 1️⃣ 채팅방 조회
@@ -414,6 +415,7 @@ export class ChatsService {
           title: 'Chatty',
           body: '새로운 메시지가 있습니다.',
           chatId: data.chatId,
+          messageId: data.messageId,
           url: '/chat',
         },
       };

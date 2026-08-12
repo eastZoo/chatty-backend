@@ -358,6 +358,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             chatId: data.chatId,
             content: data.content,
             userId: user.id,
+            messageId: savedMessage.id,
           })
           .catch((pushError) => {
             Logger.error(
