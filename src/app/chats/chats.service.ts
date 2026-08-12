@@ -410,6 +410,10 @@ export class ChatsService {
 
       const message: admin.messaging.MulticastMessage = {
         tokens: registrationTokens,
+        notification: {
+          title: 'Chatty',
+          body: '새로운 메시지가 있습니다.',
+        },
         data: {
           type: 'chat',
           title: 'Chatty',
